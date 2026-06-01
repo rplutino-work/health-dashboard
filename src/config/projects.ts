@@ -83,7 +83,7 @@ export const projects: ProjectConfig[] = [
     name: 'Plasdeko Checkout',
     url: 'https://plasdeko-checkout.vercel.app',
     checks: [
-      { name: 'frontend', type: 'frontend', path: '/' },
+      { name: 'frontend', type: 'admin', path: '/' },
     ],
   },
   {
@@ -91,7 +91,7 @@ export const projects: ProjectConfig[] = [
     name: 'Plasdeko Dashboard',
     url: 'https://plasdeko-dashboard.vercel.app',
     checks: [
-      { name: 'frontend', type: 'frontend', path: '/' },
+      { name: 'frontend', type: 'admin', path: '/' },
     ],
   },
   {
