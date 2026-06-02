@@ -1,14 +1,13 @@
 import { ProjectConfig } from '@/lib/types'
 
 export const projects: ProjectConfig[] = [
-  // ── Full-stack (Front + API+DB) ──────────────────────────────
+  // ── Full-stack ────────────────────────────────────────────────
   {
     slug: 'meller',
     name: 'MeleRoller',
     url: 'https://www.meleroller.com.ar',
     checks: [
       { name: 'front', type: 'frontend', path: '/' },
-      { name: 'api+db', type: 'api', path: '/api/banners' },
     ],
   },
   {
@@ -17,7 +16,6 @@ export const projects: ProjectConfig[] = [
     url: 'https://barbershop-brothers.vercel.app',
     checks: [
       { name: 'front', type: 'frontend', path: '/' },
-      { name: 'api+db', type: 'api', path: '/api/services' },
     ],
   },
   {

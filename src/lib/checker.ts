@@ -12,7 +12,9 @@ async function runSingleCheck(
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), alertConfig.timeoutMs)
 
+    // HEAD request first (ultra lightweight - no body download)
     const res = await fetch(url, {
+      method: 'HEAD',
       signal: controller.signal,
       redirect: check.type === 'admin' ? 'manual' : 'follow',
       headers: { 'User-Agent': 'HealthDashboard/1.0' },
@@ -31,31 +33,10 @@ async function runSingleCheck(
         errorMessage = `HTTP ${statusCode}`
       }
     } else {
-      // Frontend & API: expect 200
+      // Frontend: expect 200
       if (statusCode !== 200) {
         status = 'down'
         errorMessage = `HTTP ${statusCode}`
-      }
-    }
-
-    // Validate response body
-    if (status === 'up') {
-      try {
-        const body = await res.text()
-        if (check.type === 'api') {
-          try {
-            JSON.parse(body)
-          } catch {
-            status = 'degraded'
-            errorMessage = 'Invalid JSON response'
-          }
-        }
-        if (check.type === 'frontend' && body.length < 100) {
-          status = 'degraded'
-          errorMessage = 'Response body too short'
-        }
-      } catch {
-        // Body read failed, still consider the status code result
       }
     }
 
@@ -91,27 +72,16 @@ async function runSingleCheck(
 export async function runAllChecks(
   projects: ProjectConfig[]
 ): Promise<CheckResult[]> {
-  // Build flat list of all checks
   const allChecks = projects.flatMap((project) =>
     project.checks.map((check) => ({ project, check }))
   )
 
-  const results: CheckResult[] = []
-  const CHUNK_SIZE = 10
-
-  // Process in chunks to avoid overwhelming the serverless function
-  for (let i = 0; i < allChecks.length; i += CHUNK_SIZE) {
-    const chunk = allChecks.slice(i, i + CHUNK_SIZE)
-    const chunkResults = await Promise.allSettled(
-      chunk.map(({ project, check }) => runSingleCheck(project, check))
-    )
-
-    for (const result of chunkResults) {
-      if (result.status === 'fulfilled') {
-        results.push(result.value)
-      }
-    }
-  }
+  // All checks in parallel (all are lightweight HEAD requests now)
+  const results = await Promise.allSettled(
+    allChecks.map(({ project, check }) => runSingleCheck(project, check))
+  )
 
   return results
+    .filter((r): r is PromiseFulfilledResult<CheckResult> => r.status === 'fulfilled')
+    .map((r) => r.value)
 }
