@@ -6,25 +6,25 @@ interface HistoryBar {
 export function HistoryChart({ bars }: { bars: HistoryBar[] }) {
   if (bars.length === 0) {
     return (
-      <p className="text-xs text-zinc-500 py-4 text-center">
+      <div className="flex items-center justify-center h-10 text-[11px] text-zinc-600">
         No history data yet
-      </p>
+      </div>
     )
   }
 
   return (
-    <div className="flex gap-[2px] items-end h-8">
+    <div className="flex gap-[1px] items-end h-8 rounded-md overflow-hidden">
       {bars.map((bar, i) => (
         <div
           key={i}
-          className={`flex-1 rounded-sm min-w-[2px] ${
+          className={`flex-1 min-w-[3px] rounded-[1px] transition-all duration-150 hover:opacity-80 ${
             bar.status === 'up'
               ? 'bg-emerald-500 h-full'
               : bar.status === 'degraded'
                 ? 'bg-yellow-500 h-3/4'
                 : bar.status === 'down'
-                  ? 'bg-red-500 h-1/2'
-                  : 'bg-zinc-800 h-1/4'
+                  ? 'bg-red-500 h-full'
+                  : 'bg-zinc-800 h-1/3'
           }`}
           title={`${bar.checkedAt}: ${bar.status}`}
         />

@@ -1,4 +1,4 @@
-import { Activity, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
+import { Activity, CheckCircle2, AlertTriangle, XCircle, Clock } from 'lucide-react'
 
 interface HeaderProps {
   total: number
@@ -10,73 +10,54 @@ interface HeaderProps {
 
 export function Header({ total, up, degraded, down, lastRun }: HeaderProps) {
   const timeAgo = lastRun ? getTimeAgo(new Date(lastRun)) : 'Never'
+  const allGood = down === 0 && degraded === 0
 
   return (
     <div className="mb-8">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center">
-          <Activity size={20} className="text-emerald-400" />
+      {/* Title */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${allGood ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
+            <Activity size={18} className={allGood ? 'text-emerald-400' : 'text-red-400'} />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-white tracking-tight">Health Dashboard</h1>
+            <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+              <Clock size={10} />
+              <span>Last check {timeAgo}</span>
+            </div>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-white">Health Dashboard</h1>
-          <p className="text-xs text-zinc-500">Last check: {timeAgo}</p>
+
+        {/* Overall status */}
+        <div className={`px-4 py-2 rounded-lg border text-sm font-bold tracking-wide ${
+          allGood
+            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+            : 'bg-red-500/10 border-red-500/20 text-red-400'
+        }`}>
+          {allGood ? 'ALL SYSTEMS OK' : `${down + degraded} ISSUE${down + degraded > 1 ? 'S' : ''}`}
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
-        <StatCard
-          label="Total"
-          value={total}
-          icon={<Activity size={14} />}
-          color="text-zinc-400"
-          bg="bg-zinc-800"
-        />
-        <StatCard
-          label="Up"
-          value={up}
-          icon={<CheckCircle2 size={14} />}
-          color="text-emerald-400"
-          bg="bg-emerald-500/10"
-        />
-        <StatCard
-          label="Degraded"
-          value={degraded}
-          icon={<AlertTriangle size={14} />}
-          color="text-yellow-400"
-          bg="bg-yellow-500/10"
-        />
-        <StatCard
-          label="Down"
-          value={down}
-          icon={<XCircle size={14} />}
-          color="text-red-400"
-          bg="bg-red-500/10"
-        />
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-2">
+        <Stat label="Projects" value={total} icon={<Activity size={12} />} accent="text-zinc-400" />
+        <Stat label="Healthy" value={up} icon={<CheckCircle2 size={12} />} accent="text-emerald-400" />
+        <Stat label="Slow" value={degraded} icon={<AlertTriangle size={12} />} accent="text-yellow-400" />
+        <Stat label="Down" value={down} icon={<XCircle size={12} />} accent="text-red-400" />
       </div>
     </div>
   )
 }
 
-function StatCard({
-  label,
-  value,
-  icon,
-  color,
-  bg,
-}: {
-  label: string
-  value: number
-  icon: React.ReactNode
-  color: string
-  bg: string
-}) {
+function Stat({ label, value, icon, accent }: { label: string; value: number; icon: React.ReactNode; accent: string }) {
   return (
-    <div className={`${bg} rounded-lg p-3 border border-zinc-800`}>
-      <div className={`flex items-center gap-1.5 ${color} text-xs mb-1`}>
+    <div className="bg-zinc-900/60 border border-zinc-800/60 rounded-lg px-3 py-2.5">
+      <div className={`flex items-center gap-1.5 ${accent} text-[10px] tracking-wider uppercase mb-1`}>
         {icon}
         {label}
       </div>
-      <p className="text-2xl font-bold text-white">{value}</p>
+      <p className="text-xl font-bold text-white tabular-nums">{value}</p>
     </div>
   )
 }
