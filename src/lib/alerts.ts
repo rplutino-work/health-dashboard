@@ -70,6 +70,8 @@ async function sendDownAlert(result: CheckResult) {
         `Tiempo: ${result.checked_at}`,
         '',
         `Response: ${result.response_ms}ms`,
+        '',
+        `Link: ${project?.url ?? ''}`,
       ].join('\n'),
     })
   } catch (err) {
@@ -92,6 +94,8 @@ async function sendRecoveryAlert(result: CheckResult) {
         `Status: UP (recuperado)`,
         `Response: ${result.response_ms}ms`,
         `Tiempo: ${result.checked_at}`,
+        '',
+        `Link: ${project?.url ?? ''}`,
       ].join('\n'),
     })
   } catch (err) {
