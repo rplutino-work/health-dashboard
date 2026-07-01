@@ -73,7 +73,7 @@ export const projects: ProjectConfig[] = [
     name: 'Frutos Secos DG',
     url: 'https://frutos-secos-dg.vercel.app',
     checks: [
-      { name: 'front', type: 'frontend', path: '/' },
+      { name: 'front', type: 'frontend', path: '/api/health' },
     ],
   },
   {
@@ -81,7 +81,7 @@ export const projects: ProjectConfig[] = [
     name: 'Ecommerce Kit',
     url: 'https://ecommerce-kit-umber.vercel.app',
     checks: [
-      { name: 'front', type: 'frontend', path: '/' },
+      { name: 'front', type: 'frontend', path: '/api/health' },
     ],
   },
 
@@ -89,7 +89,7 @@ export const projects: ProjectConfig[] = [
   {
     slug: 'frutos-secos-dg-admin',
     name: 'Frutos Secos DG Admin',
-    url: 'https://frutos-secos-dg-admin.vercel.app',
+    url: 'https://frutos-secos-dg-admin-rodrigos-projects-8b995206.vercel.app',
     checks: [
       { name: 'front', type: 'admin', path: '/' },
     ],
@@ -105,7 +105,7 @@ export const projects: ProjectConfig[] = [
   {
     slug: 'plasdeko-admin',
     name: 'Plasdeko Admin',
-    url: 'https://plasdeko-admin.vercel.app',
+    url: 'https://admin.plasdeko.com.ar',
     checks: [
       { name: 'front', type: 'admin', path: '/' },
     ],
