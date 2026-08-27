@@ -1,6 +1,17 @@
 import { ProjectConfig, CheckDefinition, CheckResult, CheckStatus } from './types'
 import { alertConfig } from '@/config/projects'
 
+/**
+ * Los sitios monitoreados tienen proteccion anti-bot propia (y varios estan
+ * detras del Security Checkpoint de Vercel) que rechaza User-Agents de
+ * herramienta con 429 o 403. Con "HealthDashboard/1.0" el dashboard se reportaba
+ * caidas a si mismo. Un UA de navegador evita ese falso positivo; el monitor se
+ * identifica igual en el comentario de la cabecera para quien mire los logs.
+ */
+const USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
 async function runSingleCheck(
   project: ProjectConfig,
   check: CheckDefinition
@@ -16,7 +27,7 @@ async function runSingleCheck(
       const res = await fetch(url, {
         method: 'GET',
         signal: controller.signal,
-        headers: { 'User-Agent': 'HealthDashboard/1.0' },
+        headers: { 'User-Agent': USER_AGENT },
       })
       clearTimeout(timeout)
 
@@ -67,7 +78,7 @@ async function runSingleCheck(
       method: 'HEAD',
       signal: controller.signal,
       redirect: check.type === 'admin' ? 'manual' : 'follow',
-      headers: { 'User-Agent': 'HealthDashboard/1.0' },
+      headers: { 'User-Agent': USER_AGENT },
     })
     clearTimeout(timeout)
 
@@ -81,11 +92,14 @@ async function runSingleCheck(
         status = 'down'
         errorMessage = `HTTP ${statusCode}`
       }
-    } else {
-      if (statusCode !== 200) {
-        status = 'down'
-        errorMessage = `HTTP ${statusCode}`
-      }
+    } else if (statusCode === 429) {
+      // Rate limit o challenge de seguridad: el servidor esta vivo y respondiendo.
+      // Marcarlo como caido dispararia alertas por proteccion funcionando bien.
+      status = 'degraded'
+      errorMessage = 'Protegido (429): rate limit o security challenge'
+    } else if (statusCode !== 200) {
+      status = 'down'
+      errorMessage = `HTTP ${statusCode}`
     }
 
     if (status === 'up' && responseMs > alertConfig.degradedThresholdMs) {

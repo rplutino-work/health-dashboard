@@ -64,7 +64,7 @@ export const projects: ProjectConfig[] = [
   {
     slug: 'argentum-web',
     name: 'Argentum Web',
-    url: 'https://argentum-web-five.vercel.app',
+    url: 'https://argentumsubastas.com',
     checks: [
       { name: 'front', type: 'frontend', path: '/' },
     ],
