@@ -2,7 +2,7 @@ import { Resend } from 'resend'
 import { supabase } from '@/lib/supabase'
 import { alertConfig } from '@/config/projects'
 import { getCostBreakdown, getFx } from '@/lib/costs'
-import { renderEmail, subjectFor, type EmailRow } from '@/lib/email-templates'
+import { renderEmail, subjectFor, renderBarChart, type EmailRow } from '@/lib/email-templates'
 
 /**
  * Avisos de plata y de límites.
@@ -71,7 +71,7 @@ export async function processCostAlerts(): Promise<CostAlertReport> {
   const skipped: string[] = []
 
   const [breakdown, fx] = await Promise.all([getCostBreakdown(), getFx()])
-  const rate = fx.tarjeta ?? fx.oficial
+  const rate = fx.oficial ?? fx.tarjeta
 
   // ── Proyección por encima del umbral ──────────────────────────────────────
   if (breakdown.totalProjected >= COST_ALERT_USD) {
@@ -120,7 +120,7 @@ export async function processCostAlerts(): Promise<CostAlertReport> {
             : undefined,
           rows,
           cta: { label: 'Ver el detalle', url: DASHBOARD_URL },
-          footer: rate ? `Convertido al dólar tarjeta $${rate.toLocaleString('es-AR')}.` : undefined,
+          footer: rate ? `Convertido al dólar oficial $${rate.toLocaleString('es-AR')}.` : undefined,
         }),
       })
       await logSystemAlert('cost_projection')
@@ -206,7 +206,7 @@ export async function sendDailyDigest(): Promise<boolean> {
   if (await alreadySent('daily_digest', 20)) return false
 
   const [breakdown, fx] = await Promise.all([getCostBreakdown(), getFx()])
-  const rate = fx.tarjeta ?? fx.oficial
+  const rate = fx.oficial ?? fx.tarjeta
 
   const { data: lastRun } = await supabase
     .from('health_runs')
@@ -219,14 +219,30 @@ export async function sendDailyDigest(): Promise<boolean> {
   const degraded = lastRun?.degraded ?? 0
   const severity = down > 0 ? 'critical' : degraded > 0 ? 'warning' : 'ok'
 
-  const top = breakdown.projects
-    .filter((p) => (p.total ?? 0) > 0)
-    .slice(0, 5)
-    .map(
-      (p) =>
-        `<li style="margin:2px 0;">${p.name} — <strong>US$${(p.total ?? 0).toFixed(2)}</strong></li>`
-    )
-    .join('')
+  // Grafico de barras del gasto por proyecto: en un resumen diario un ranking se
+  // lee de un vistazo, una lista de numeros hay que compararla mentalmente.
+  const chart = renderBarChart(
+    breakdown.projects
+      .filter((p) => (p.total ?? 0) > 0)
+      .slice(0, 6)
+      .map((p) => ({
+        label: p.name.length > 22 ? p.name.slice(0, 21) + '…' : p.name,
+        value: p.total ?? 0,
+        display: `US$${(p.total ?? 0).toFixed(2)}`,
+      }))
+  )
+
+  // Y otro con el peso de cada proveedor, que es donde se decide el total.
+  const providerChart = renderBarChart(
+    breakdown.charges
+      .filter((c) => c.amountToDate > 0)
+      .map((c) => ({
+        label: c.provider,
+        value: c.amountToDate,
+        display: `US$${c.amountToDate.toFixed(2)}`,
+      })),
+    '#3f3f46'
+  )
 
   const rows: EmailRow[] = [
     { label: 'Proyectos OK', value: String(lastRun?.passed ?? 0) },
@@ -237,7 +253,7 @@ export async function sendDailyDigest(): Promise<boolean> {
       value: money(breakdown.totalProjected, rate),
       emphasis: true,
     },
-    ...(rate ? [{ label: 'Dólar tarjeta', value: `$${rate.toLocaleString('es-AR')}` }] : []),
+    ...(rate ? [{ label: 'Dólar oficial', value: `$${rate.toLocaleString('es-AR')}` }] : []),
   ]
 
   await resend().emails.send({
@@ -253,7 +269,10 @@ export async function sendDailyDigest(): Promise<boolean> {
       severity,
       title: down > 0 ? `${down} proyecto${down > 1 ? 's' : ''} caído${down > 1 ? 's' : ''}` : 'Todo funcionando',
       subtitle: `Resumen del día · ${breakdown.projects.length} proyectos con consumo atribuido`,
-      body: top ? `<p style="margin:0 0 8px;">Los que más gastan:</p><ul style="margin:0;padding-left:18px;">${top}</ul>` : undefined,
+      body: `
+      ${providerChart ? `<p style="margin:0 0 4px;font-weight:600;">Por proveedor</p>${providerChart}` : ''}
+      ${chart ? `<p style="margin:16px 0 4px;font-weight:600;">Por proyecto</p>${chart}` : ''}
+    `,
       rows,
       cta: { label: 'Abrir el dashboard', url: DASHBOARD_URL },
       footer: 'Los ciclos de cada proveedor cierran en fechas distintas.',

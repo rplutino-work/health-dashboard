@@ -134,3 +134,50 @@ function escapeHtml(s: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
 }
+
+export interface BarDatum {
+  label: string
+  value: number
+  /** Texto a la derecha: el monto formateado. */
+  display: string
+}
+
+/**
+ * Gráfico de barras para mail.
+ *
+ * Nada de SVG ni divs con flex: Gmail los descarta y Outlook los rompe. La única
+ * forma que renderiza igual en todos lados es una tabla donde cada barra son dos
+ * celdas con ancho en porcentaje y color de fondo — feo de escribir, pero se ve
+ * bien hasta en Outlook 2016.
+ *
+ * El ancho va en porcentaje sobre el mayor valor, no sobre el total: así la
+ * barra más larga siempre llena la fila y las proporciones se leen entre sí.
+ */
+export function renderBarChart(data: BarDatum[], color = '#18181b'): string {
+  if (data.length === 0) return ''
+  const max = Math.max(...data.map((d) => d.value), 1)
+
+  const rows = data
+    .map((d) => {
+      // Mínimo 2% para que una barra chica siga siendo visible.
+      const pct = Math.max(Math.round((d.value / max) * 100), 2)
+      const rest = 100 - pct
+      return `
+        <tr>
+          <td style="padding:5px 8px 5px 0;font-size:12px;color:#3f3f46;white-space:nowrap;">${escapeHtml(d.label)}</td>
+          <td style="padding:5px 0;width:55%;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+              <tr>
+                <td width="${pct}%" bgcolor="${color}" style="background:${color};height:8px;border-radius:4px 0 0 4px;font-size:0;line-height:0;">&nbsp;</td>
+                ${rest > 0 ? `<td width="${rest}%" bgcolor="#e4e4e7" style="background:#e4e4e7;height:8px;border-radius:0 4px 4px 0;font-size:0;line-height:0;">&nbsp;</td>` : ''}
+              </tr>
+            </table>
+          </td>
+          <td style="padding:5px 0 5px 10px;font-size:12px;font-weight:700;color:#18181b;text-align:right;white-space:nowrap;">${escapeHtml(d.display)}</td>
+        </tr>`
+    })
+    .join('')
+
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:4px 0 0;">${rows}</table>`
+}
+

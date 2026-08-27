@@ -41,7 +41,7 @@ export interface SnapshotReport {
 export async function snapshotBilling(): Promise<SnapshotReport> {
   const [breakdown, fx] = await Promise.all([getCostBreakdown(), getFx(2)])
   const today = new Date().toISOString().slice(0, 10)
-  const rate = fx.tarjeta ?? fx.oficial
+  const rate = fx.oficial ?? fx.tarjeta
 
   const rows = breakdown.charges.map((c) => {
     // Reparto por proyecto de ESTE proveedor, para poder reconstruir después

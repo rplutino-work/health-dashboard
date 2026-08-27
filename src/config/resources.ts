@@ -47,6 +47,9 @@ export const RESOURCES: Record<string, ProjectResources> = {
   // Base de musica: 213k canciones, 125k tags, 7k resenas. Aparecia como
   // "consumo sin asignar" hasta que se rastreo que pleyade la usa.
   pleyade: { neon: 'tiny-fog-60155655', vercel: 'pleyade' },
+  // fungis es la base de Estado de Caja: figuraba como huerfana porque el nombre
+  // del proyecto en Neon no se parece en nada al del sitio que la usa.
+  estadodecaja: { neon: 'spring-math-40112672', vercel: 'estadodecaja' },
   'frutos-secos-dg-admin': { vercel: 'frutos-secos-dg-admin' },
   'rok-admin': { neon: 'plain-bread-34489395', vercel: 'rok-admin' },
   // plasdeko: la base salió de Neon a Railway el 27/08/2026. Falta el service id

@@ -145,7 +145,7 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
         <CostBars
           projects={breakdown.projects}
-          fxTarjeta={fx.tarjeta}
+          fxOficial={fx.oficial}
           total={breakdown.totalToDate}
         />
         <FxCard

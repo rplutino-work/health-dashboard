@@ -2,8 +2,8 @@ import type { ProjectCost } from '@/lib/costs'
 
 interface CostBarsProps {
   projects: ProjectCost[]
-  /** Dólar tarjeta: el que se aplica al pagar servicios del exterior. */
-  fxTarjeta: number | null
+  /** Dólar oficial: se compran los dólares y se paga el resumen en USD. */
+  fxOficial: number | null
   total: number
 }
 
@@ -18,7 +18,7 @@ interface CostBarsProps {
  * paleta acá competiría con el rojo de "caído", que es lo único que debe gritar
  * en este panel.
  */
-export function CostBars({ projects, fxTarjeta, total }: CostBarsProps) {
+export function CostBars({ projects, fxOficial, total }: CostBarsProps) {
   const withCost = projects.filter((p) => (p.total ?? 0) > 0)
   if (withCost.length === 0) return null
 
@@ -46,9 +46,9 @@ export function CostBars({ projects, fxTarjeta, total }: CostBarsProps) {
                 <span className="text-[12px] text-zinc-700 truncate">{p.name}</span>
                 <span className="text-[11px] tabular-nums shrink-0">
                   <span className="font-bold text-zinc-900">US${cost.toFixed(2)}</span>
-                  {fxTarjeta && (
+                  {fxOficial && (
                     <span className="text-zinc-400 ml-1.5">
-                      ${Math.round(cost * fxTarjeta).toLocaleString('es-AR')}
+                      ${Math.round(cost * fxOficial).toLocaleString('es-AR')}
                     </span>
                   )}
                   <span className="text-zinc-300 ml-1.5">{shareOfTotal.toFixed(0)}%</span>
@@ -85,9 +85,9 @@ interface FxCardProps {
  * de las dos cosas pasó.
  */
 export function FxCard({ oficial, tarjeta, day, series, totalUsd, projectedUsd }: FxCardProps) {
-  const rate = tarjeta ?? oficial
+  const rate = oficial ?? tarjeta
   const bars = series.slice(-14)
-  const values = bars.map((b) => b.tarjeta ?? b.oficial ?? 0).filter((v) => v > 0)
+  const values = bars.map((b) => b.oficial ?? b.tarjeta ?? 0).filter((v) => v > 0)
   const min = values.length ? Math.min(...values) : 0
   const max = values.length ? Math.max(...values) : 1
   const range = max - min || 1
@@ -130,13 +130,13 @@ export function FxCard({ oficial, tarjeta, day, series, totalUsd, projectedUsd }
       <div className="flex items-center gap-3 pt-3 border-t border-zinc-100 text-[11px]">
         <span className="text-zinc-500">
           oficial{' '}
-          <span className="text-zinc-800 font-semibold tabular-nums">
+          <span className="text-zinc-900 font-bold tabular-nums">
             ${oficial?.toLocaleString('es-AR') ?? '—'}
           </span>
         </span>
         <span className="text-zinc-500">
           tarjeta{' '}
-          <span className="text-zinc-900 font-bold tabular-nums">
+          <span className="text-zinc-400 font-normal tabular-nums">
             ${tarjeta?.toLocaleString('es-AR') ?? '—'}
           </span>
         </span>
@@ -155,7 +155,7 @@ export function FxCard({ oficial, tarjeta, day, series, totalUsd, projectedUsd }
       {bars.length > 1 && (
         <div className="flex items-end gap-[3px] h-10 mt-3">
           {bars.map((b) => {
-            const v = b.tarjeta ?? b.oficial ?? 0
+            const v = b.oficial ?? b.tarjeta ?? 0
             const h = ((v - min) / range) * 80 + 20
             return (
               <div
@@ -169,7 +169,7 @@ export function FxCard({ oficial, tarjeta, day, series, totalUsd, projectedUsd }
         </div>
       )}
       <p className="text-[10px] text-zinc-400 mt-2">
-        Se usa el dólar tarjeta: es el que aplican los bancos a servicios del exterior.
+        Se usa el dólar oficial: los servicios se pagan en dólares, sin percepciones de tarjeta.
       </p>
     </div>
   )

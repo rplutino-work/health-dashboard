@@ -245,9 +245,13 @@ export interface FxSnapshot {
 /**
  * Cotización para convertir el gasto a pesos.
  *
- * Se usa el dólar TARJETA para el monto a pagar: es el que aplican los bancos
- * argentinos a servicios del exterior, y está ~30% arriba del oficial. Mostrar
- * el costo al oficial daría un número que nadie va a pagar nunca.
+ * Se usa el dólar OFICIAL: los servicios se pagan comprando los dólares y
+ * cancelando el resumen en moneda extranjera, sin las percepciones que aplican
+ * los bancos al consumo con tarjeta. Convertir al tarjeta inflaría el costo un
+ * ~30% que en este caso no se paga.
+ *
+ * Se guarda igual la serie del tarjeta como referencia, por si algún pago llega
+ * a hacerse por esa vía.
  */
 export async function getFx(days = 30): Promise<FxSnapshot> {
   const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10)
