@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabase'
 import { projects } from '@/config/projects'
 import { Header } from '@/components/header'
 import { ProjectCard } from '@/components/project-card'
+import { UsagePanel } from '@/components/usage-panel'
+import { getProratedUsage } from '@/lib/usage'
 
 export const revalidate = 60
 
@@ -32,8 +34,56 @@ async function getData() {
   return { checks: (checks as HealthCheck[]) || [], lastRun }
 }
 
+
+/**
+ * Consumo para el panel. Lee de provider_usage, que ya viene capturado por el
+ * cron: la página no llama a las APIs de los proveedores, así que abrir el
+ * dashboard no dispara pedidos ni consumo contra ellos.
+ */
+async function getUsage() {
+  const [neon, dbBytes, conns, maxConns, schemaRows] = await Promise.all([
+    getProratedUsage('neon', 'cu_hours'),
+    latestValue('supabase', 'db_bytes'),
+    latestValue('supabase', 'connections'),
+    latestValue('supabase', 'max_connections'),
+    getProratedUsage('supabase', 'schema_bytes'),
+  ])
+
+  const { data: last } = await supabase
+    .from('provider_usage')
+    .select('captured_at')
+    .order('captured_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return {
+    neon: neon.filter((n) => n.value > 0),
+    supabase: {
+      dbBytes,
+      connections: conns,
+      maxConnections: maxConns,
+      schemas: schemaRows
+        .filter((r) => r.value > 0.05 * 1048576)
+        .map((r) => ({ name: r.project_name, bytes: r.value })),
+    },
+    capturedAt: last?.captured_at ?? null,
+  }
+}
+
+async function latestValue(provider: string, metric: string): Promise<number | null> {
+  const { data } = await supabase
+    .from('provider_usage')
+    .select('value')
+    .eq('provider', provider)
+    .eq('metric', metric)
+    .order('captured_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data ? Number(data.value) : null
+}
+
 export default async function DashboardPage() {
-  const { checks, lastRun } = await getData()
+  const [{ checks, lastRun }, usage] = await Promise.all([getData(), getUsage()])
 
   // Deduplicate: keep latest per project_slug+check_name
   const latest = new Map<string, HealthCheck>()
@@ -90,6 +140,10 @@ export default async function DashboardPage() {
         down={down}
         lastRun={lastRun?.finished_at || lastRun?.started_at || null}
       />
+
+      <div className="mb-5">
+        <UsagePanel neon={usage.neon} supabase={usage.supabase} capturedAt={usage.capturedAt} />
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {projectStatuses.map((project) => (

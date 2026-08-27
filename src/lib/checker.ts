@@ -12,7 +12,57 @@ async function runSingleCheck(
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), alertConfig.timeoutMs)
 
-    // HEAD request first (ultra lightweight - no body download)
+    if (check.type === 'cron') {
+      const res = await fetch(url, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: { 'User-Agent': 'HealthDashboard/1.0' },
+      })
+      clearTimeout(timeout)
+
+      const responseMs = Date.now() - start
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '')
+        return {
+          project_slug: project.slug,
+          check_name: check.name,
+          status: 'down',
+          status_code: res.status,
+          response_ms: responseMs,
+          error_message: `HTTP ${res.status}: ${body.slice(0, 200)}`,
+          checked_at: new Date().toISOString(),
+        }
+      }
+
+      const json = await res.json()
+      const failedCrons = (json.crons || []).filter((c: { ok: boolean }) => !c.ok)
+
+      if (failedCrons.length > 0) {
+        const names = failedCrons.map((c: { name: string }) => c.name).join(', ')
+        return {
+          project_slug: project.slug,
+          check_name: check.name,
+          status: 'down',
+          status_code: res.status,
+          response_ms: responseMs,
+          error_message: `Crons missed: ${names}`,
+          checked_at: new Date().toISOString(),
+        }
+      }
+
+      return {
+        project_slug: project.slug,
+        check_name: check.name,
+        status: 'up',
+        status_code: 200,
+        response_ms: responseMs,
+        error_message: null,
+        checked_at: new Date().toISOString(),
+      }
+    }
+
+    // HEAD request for frontend/api/admin checks
     const res = await fetch(url, {
       method: 'HEAD',
       signal: controller.signal,
@@ -27,20 +77,17 @@ async function runSingleCheck(
     let errorMessage: string | null = null
 
     if (check.type === 'admin') {
-      // Admin: 200, 302, 307 are all healthy (redirect to login = OK)
       if (statusCode >= 500) {
         status = 'down'
         errorMessage = `HTTP ${statusCode}`
       }
     } else {
-      // Frontend: expect 200
       if (statusCode !== 200) {
         status = 'down'
         errorMessage = `HTTP ${statusCode}`
       }
     }
 
-    // Slow response = degraded
     if (status === 'up' && responseMs > alertConfig.degradedThresholdMs) {
       status = 'degraded'
       errorMessage = `Slow: ${responseMs}ms`
@@ -76,7 +123,6 @@ export async function runAllChecks(
     project.checks.map((check) => ({ project, check }))
   )
 
-  // All checks in parallel (all are lightweight HEAD requests now)
   const results = await Promise.allSettled(
     allChecks.map(({ project, check }) => runSingleCheck(project, check))
   )

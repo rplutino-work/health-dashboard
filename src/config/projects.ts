@@ -24,6 +24,7 @@ export const projects: ProjectConfig[] = [
     url: 'https://pilatesbasicsclub.com',
     checks: [
       { name: 'front', type: 'frontend', path: '/' },
+      { name: 'crons', type: 'cron', path: '/api/health' },
     ],
   },
   {
@@ -51,6 +52,14 @@ export const projects: ProjectConfig[] = [
     ],
   },
 
+  {
+    slug: 'powerseries-club',
+    name: 'PowerSeries Club',
+    url: 'https://compactfitclub.com',
+    checks: [
+      { name: 'front', type: 'frontend', path: '/' },
+    ],
+  },
   // ── Frontends sin back propio ────────────────────────────────
   {
     slug: 'argentum-web',

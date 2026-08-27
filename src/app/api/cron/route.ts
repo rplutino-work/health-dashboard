@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase'
 import { runAllChecks } from '@/lib/checker'
 import { processAlerts } from '@/lib/alerts'
 import { projects } from '@/config/projects'
+import { collectAllUsage } from '@/lib/usage'
+import { shouldCollectUsage, runDailyMaintenance } from '@/lib/maintenance'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -64,11 +66,33 @@ async function handler(request: NextRequest) {
     console.error('Alert processing error:', err)
   }
 
+  // Consumo de los proveedores. Se lee de sus APIs de control, no de las bases:
+  // mirar cuanto gasta Neon no despierta ningun compute ni suma a la factura.
+  // Con su propio intervalo, para no guardar la misma cifra 48 veces al dia.
+  let usage: Awaited<ReturnType<typeof collectAllUsage>> | null = null
+  try {
+    if (await shouldCollectUsage()) {
+      usage = await collectAllUsage()
+    }
+  } catch (err) {
+    console.error('Usage collection error:', err)
+  }
+
+  // Consolidar el dia anterior y purgar checks crudos viejos. Una vez por dia.
+  let maintenance = null
+  try {
+    maintenance = await runDailyMaintenance()
+  } catch (err) {
+    console.error('Maintenance error:', err)
+  }
+
   return NextResponse.json({
     success: true,
     total: results.length,
     passed,
     failed,
     degraded,
+    usage: usage ? { captured: usage.captured, errors: usage.errors } : 'skipped',
+    maintenance,
   })
 }
