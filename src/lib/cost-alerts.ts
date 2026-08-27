@@ -39,12 +39,21 @@ async function alreadySent(type: string, hours = COOLDOWN_HOURS): Promise<boolea
 }
 
 async function logSystemAlert(type: string) {
-  await supabase.from('alert_log').insert({
+  // email_to es NOT NULL en alert_log: omitirlo hacia fallar el insert en
+  // silencio, y sin registro el cooldown no se aplicaba nunca — el mismo aviso
+  // salia en cada corrida del cron.
+  const { error } = await supabase.from('alert_log').insert({
     project_slug: '__system__',
     check_name: 'cost',
     alert_type: type,
     sent_at: new Date().toISOString(),
+    email_to: alertConfig.emailTo,
   })
+  if (error) {
+    // Si no se puede registrar, es preferible saberlo: la alternativa silenciosa
+    // es spamear la casilla cada 30 minutos.
+    console.error('No se pudo registrar la alerta:', error.message)
+  }
 }
 
 function money(usd: number, rate: number | null) {
