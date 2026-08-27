@@ -79,9 +79,14 @@ export async function collectSupabase(
 
   // Cada schema se atribuye a su proyecto: así "cuánto ocupa simuladorvr" tiene
   // respuesta aunque comparta la base con el health-dashboard.
+  //
+  // El resource_ref lleva el schema además del proyecto. Sin eso todas las filas
+  // compartirían identificador y, al quedarse con la última de cada recurso, el
+  // dashboard mostraría el peso de un schema cualquiera para todos.
   for (const s of row.schemas ?? []) {
     samples.push({
       ...base,
+      resource_ref: `${projectRef}/${s.schema}`,
       project_slug: schemaToSlug.get(s.schema) ?? null,
       metric: 'schema_bytes',
       value: Number(s.bytes),

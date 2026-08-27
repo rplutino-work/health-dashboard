@@ -28,7 +28,7 @@ export const RESOURCES: Record<string, ProjectResources> = {
   simuladorvr: {
     // Migrado a Supabase el 27/08/2026; el proyecto de Neon quedó vacío.
     neon: 'lively-sunset-04016622',
-    supabase: 'kucydhmobdcaihnpogqt',
+    supabase: 'kucydhmobdcaihnpogqt/simuladorvr',
     vercel: 'simuladorvr',
   },
   'argentum-web': { neon: 'purple-band-68109684', vercel: 'argentum-web' },
