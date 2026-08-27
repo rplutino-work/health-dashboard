@@ -21,11 +21,15 @@ import type { Provider } from '@/lib/types'
  * ciclo de cada uno, y sumarlos como si coincidieran sería inventar precisión.
  */
 
-const ROLE: Record<Provider, 'frontend' | 'backend' | 'database'> = {
+const ROLE: Record<Provider, 'frontend' | 'backend' | 'database' | 'tooling'> = {
   vercel: 'frontend',
   railway: 'backend',
   neon: 'database',
   supabase: 'database',
+  // Anthropic no es infraestructura de ningun sitio: es herramienta de trabajo.
+  // Entra al total porque se paga todos los meses, pero no se reparte entre
+  // proyectos — atribuirle un porcentaje a cada sitio seria inventar un dato.
+  anthropic: 'tooling',
 }
 
 /** La métrica que mejor aproxima el reparto del gasto en cada proveedor. */
@@ -34,6 +38,8 @@ const BILLED_METRIC: Record<Provider, string> = {
   supabase: 'schema_bytes',
   railway: 'memory_usage_gb',
   vercel: 'deployments',
+  // Sin metrica de consumo: el cargo se muestra entero, sin prorratear.
+  anthropic: '__none__',
 }
 
 export interface ProviderCharge {
@@ -49,10 +55,12 @@ export interface ProviderCharge {
   daysLeft: number
   /** Proyección propia si el proveedor no la publica. */
   ownProjection: number
+  /** 'panel' = leído de la facturación del proveedor; 'estimado' = declarado. */
+  source: string
 }
 
 export interface ResourceCost {
-  role: 'frontend' | 'backend' | 'database'
+  role: 'frontend' | 'backend' | 'database' | 'tooling'
   provider: Provider
   ref: string
   value: number
@@ -107,6 +115,7 @@ async function getCharges(): Promise<Map<Provider, ProviderCharge>> {
       daysLeft: Math.max((end - now) / 86400000, 0),
       // Si el proveedor no publica su estimación, se extrapola el ritmo.
       ownProjection: pct > 0 ? (amount / pct) * 100 : amount,
+      source: r.source ?? 'panel',
     })
   }
   return map
@@ -169,7 +178,10 @@ export async function getCostBreakdown(): Promise<CostBreakdown> {
 
   for (const [slug, res] of Object.entries(RESOURCES)) {
     const list: ResourceCost[] = []
-    for (const provider of ['vercel', 'railway', 'neon', 'supabase'] as Provider[]) {
+    // Solo los proveedores que pueden pertenecer a un proyecto. Anthropic queda
+    // fuera a proposito: es herramienta de trabajo, no infraestructura de un sitio.
+    const ATTRIBUTABLE = ['vercel', 'railway', 'neon', 'supabase'] as const
+    for (const provider of ATTRIBUTABLE) {
       const ref = res[provider]
       if (!ref) continue
       const key = `${provider}:${ref}`

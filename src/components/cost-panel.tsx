@@ -138,6 +138,13 @@ export function CostPanel({ breakdown, supabase }: CostPanelProps) {
                         {c.plan}
                       </span>
                     )}
+                    {/* Un monto declarado no puede parecer uno leido de la
+                        facturacion: la diferencia cambia cuanto confiar en el total. */}
+                    {c.source !== 'panel' && (
+                      <span className="ml-2 text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 uppercase tracking-wider">
+                        estimado
+                      </span>
+                    )}
                   </h3>
                   <span className="text-[10px] text-zinc-400 flex items-center gap-1">
                     <CalendarClock size={10} />

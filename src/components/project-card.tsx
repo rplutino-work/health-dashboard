@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ChevronRight, Globe, Server, Database } from 'lucide-react'
+import { ChevronRight, Globe, Server, Database, Wrench } from 'lucide-react'
 import { StatusBadge } from './status-badge'
 import { Sparkline } from './sparkline'
 import type { ResourceCost } from '@/lib/costs'
@@ -27,6 +27,7 @@ const ROLE_META = {
   frontend: { icon: Globe, label: 'Front' },
   backend: { icon: Server, label: 'Back' },
   database: { icon: Database, label: 'Base' },
+  tooling: { icon: Wrench, label: 'Tool' },
 } as const
 
 /** Números chicos con decimal, grandes sin: 8.3 CU-h pero 221 CU-h. */

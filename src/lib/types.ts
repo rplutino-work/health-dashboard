@@ -51,7 +51,7 @@ export interface HealthRun {
 
 // ── Consumo por proveedor ──────────────────────────────────────────────────
 
-export type Provider = 'neon' | 'supabase' | 'railway' | 'vercel'
+export type Provider = 'neon' | 'supabase' | 'railway' | 'vercel' | 'anthropic'
 
 /**
  * Una medición de consumo. `value` es el valor crudo que devolvió el proveedor;
