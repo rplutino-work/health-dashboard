@@ -89,10 +89,12 @@ export function CostPanel({ breakdown, supabase }: CostPanelProps) {
       <div className="flex items-start gap-2 text-[11px] text-zinc-500 bg-zinc-100/70 border border-zinc-200 rounded-lg px-3 py-2">
         <Ruler size={13} className="mt-0.5 shrink-0 text-zinc-400" />
         <p className="leading-relaxed">
-          Los <strong className="text-zinc-700">montos son reales</strong>, tomados del panel de
-          facturación de cada proveedor. El{' '}
+          Los montos marcados <strong className="text-zinc-700">sin badge son reales</strong>,
+          tomados del panel de facturación de cada proveedor; los que dicen{' '}
+          <strong className="text-amber-700">estimado</strong> son declarados y no se pudieron
+          verificar por API. El{' '}
           <strong className="text-zinc-700">reparto entre proyectos es derivado</strong>: se
-          prorratea según el consumo medido por API.
+          prorratea según el consumo medido.
           {capturedAt && (
             <>
               {' '}
