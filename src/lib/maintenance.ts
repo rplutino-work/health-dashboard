@@ -10,8 +10,14 @@ import { supabase } from '@/lib/supabase'
  * decide sola si le toca.
  */
 
-/** Cada cuánto capturar consumo. Los contadores no se mueven más rápido que esto. */
-const USAGE_INTERVAL_MS = 60 * 60 * 1000 // 1 hora
+/**
+ * Cada cuánto capturar consumo: dos veces por día.
+ *
+ * Los contadores de los proveedores se mueven despacio y lo que interesa es la
+ * tendencia, no el minuto a minuto. Medir cada hora guardaba 24 filas diarias
+ * por serie para dibujar la misma pendiente que se ve con 2.
+ */
+const USAGE_INTERVAL_MS = 12 * 60 * 60 * 1000 // 12 horas
 
 /** Días de checks crudos a conservar. Lo anterior queda solo como resumen diario. */
 const KEEP_DAYS = 30

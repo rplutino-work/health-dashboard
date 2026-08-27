@@ -5,6 +5,7 @@ import { collectNeon, NEON_CUMULATIVE } from '@/lib/providers/neon'
 import { collectSupabase } from '@/lib/providers/supabase-usage'
 import { collectRailway } from '@/lib/providers/railway'
 import { collectVercel } from '@/lib/providers/vercel'
+import { collectFx } from '@/lib/providers/fx'
 import type { Provider, UsageSample, ProratedUsage } from '@/lib/types'
 
 /**
@@ -101,6 +102,24 @@ export async function collectAllUsage(): Promise<CollectReport> {
     } catch (e) {
       errors.push({ provider: 'vercel', message: (e as Error).message })
     }
+  }
+
+  // Cotizacion del dolar: el gasto esta en dolares pero se paga en pesos, y la
+  // factura puede subir sin que se consuma un byte mas.
+  try {
+    const quotes = await collectFx()
+    const today = new Date().toISOString().slice(0, 10)
+    const rows = quotes.map((q) => ({
+      day: today,
+      casa: q.casa,
+      compra: q.compra,
+      venta: q.venta,
+    }))
+    if (rows.length) {
+      await supabase.from('fx_rates').upsert(rows, { onConflict: 'day,casa' })
+    }
+  } catch (e) {
+    errors.push({ provider: 'neon', message: `fx: ${(e as Error).message}` })
   }
 
   if (samples.length === 0) return { captured: 0, errors }

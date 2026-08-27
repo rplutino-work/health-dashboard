@@ -3,7 +3,8 @@ import { projects } from '@/config/projects'
 import { Header } from '@/components/header'
 import { ProjectCard } from '@/components/project-card'
 import { CostPanel } from '@/components/cost-panel'
-import { getCostBreakdown } from '@/lib/costs'
+import { getCostBreakdown, getFx } from '@/lib/costs'
+import { CostBars, FxCard } from '@/components/cost-bars'
 
 export const revalidate = 60
 
@@ -60,10 +61,11 @@ async function getSupabaseLimits() {
 }
 
 export default async function DashboardPage() {
-  const [{ checks, lastRun }, breakdown, supabaseLimits] = await Promise.all([
+  const [{ checks, lastRun }, breakdown, supabaseLimits, fx] = await Promise.all([
     getData(),
     getCostBreakdown(),
     getSupabaseLimits(),
+    getFx(),
   ])
 
   // Deduplicate: keep latest per project_slug+check_name
@@ -134,6 +136,22 @@ export default async function DashboardPage() {
       />
 
       <CostPanel breakdown={breakdown} supabase={supabaseLimits} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
+        <CostBars
+          projects={breakdown.projects}
+          fxTarjeta={fx.tarjeta}
+          total={breakdown.totalToDate}
+        />
+        <FxCard
+          oficial={fx.oficial}
+          tarjeta={fx.tarjeta}
+          day={fx.day}
+          series={fx.series}
+          totalUsd={breakdown.totalToDate}
+          projectedUsd={breakdown.totalProjected}
+        />
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {projectStatuses.map((project) => (

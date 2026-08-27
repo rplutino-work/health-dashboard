@@ -5,6 +5,7 @@ import { processAlerts } from '@/lib/alerts'
 import { projects } from '@/config/projects'
 import { collectAllUsage } from '@/lib/usage'
 import { shouldCollectUsage, runDailyMaintenance } from '@/lib/maintenance'
+import { processCostAlerts, sendDailyDigest } from '@/lib/cost-alerts'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -89,6 +90,31 @@ async function handler(request: NextRequest) {
     console.error('Maintenance error:', err)
   }
 
+  // Avisos de plata y limites. Van despues de capturar consumo para que miren
+  // datos frescos, no los de la corrida anterior.
+  let costAlerts = null
+  try {
+    costAlerts = await processCostAlerts()
+  } catch (err) {
+    console.error('Cost alerts error:', err)
+  }
+
+  // Resumen diario, a partir de las 9 de la manana hora argentina: un momento
+  // fijo para enterarse de como viene todo sin depender de que algo se rompa.
+  let digest = false
+  try {
+    const hourArg = Number(
+      new Date().toLocaleString('en-US', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        hour: 'numeric',
+        hour12: false,
+      })
+    )
+    if (hourArg >= 9) digest = await sendDailyDigest()
+  } catch (err) {
+    console.error('Digest error:', err)
+  }
+
   return NextResponse.json({
     success: true,
     total: results.length,
@@ -97,5 +123,7 @@ async function handler(request: NextRequest) {
     degraded,
     usage: usage ? { captured: usage.captured, errors: usage.errors } : 'skipped',
     maintenance,
+    costAlerts,
+    digest,
   })
 }

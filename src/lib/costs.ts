@@ -233,3 +233,44 @@ export async function getCostBreakdown(): Promise<CostBreakdown> {
     missingCharges: [...measured].filter((p) => !charges.has(p)),
   }
 }
+
+export interface FxSnapshot {
+  oficial: number | null
+  tarjeta: number | null
+  day: string | null
+  /** Serie de los últimos días para ver si el peso movió la factura. */
+  series: Array<{ day: string; oficial: number | null; tarjeta: number | null }>
+}
+
+/**
+ * Cotización para convertir el gasto a pesos.
+ *
+ * Se usa el dólar TARJETA para el monto a pagar: es el que aplican los bancos
+ * argentinos a servicios del exterior, y está ~30% arriba del oficial. Mostrar
+ * el costo al oficial daría un número que nadie va a pagar nunca.
+ */
+export async function getFx(days = 30): Promise<FxSnapshot> {
+  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10)
+  const { data } = await supabase
+    .from('fx_rates')
+    .select('day, casa, venta')
+    .gte('day', since)
+    .order('day', { ascending: true })
+
+  const byDay = new Map<string, { oficial: number | null; tarjeta: number | null }>()
+  for (const r of data ?? []) {
+    const entry = byDay.get(r.day) ?? { oficial: null, tarjeta: null }
+    if (r.casa === 'oficial') entry.oficial = Number(r.venta)
+    if (r.casa === 'tarjeta') entry.tarjeta = Number(r.venta)
+    byDay.set(r.day, entry)
+  }
+
+  const series = [...byDay.entries()].map(([day, v]) => ({ day, ...v }))
+  const last = series[series.length - 1]
+  return {
+    oficial: last?.oficial ?? null,
+    tarjeta: last?.tarjeta ?? null,
+    day: last?.day ?? null,
+    series,
+  }
+}
