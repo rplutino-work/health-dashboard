@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { Globe, Database, Clock, ChevronRight } from 'lucide-react'
+import { ChevronRight, Globe, Server, Database } from 'lucide-react'
 import { StatusBadge } from './status-badge'
+import type { ResourceCost } from '@/lib/costs'
 
 interface ProjectCardProps {
   slug: string
@@ -14,104 +15,102 @@ interface ProjectCardProps {
     response_ms: number
     checked_at: string
   }>
+  /** Infraestructura del proyecto con su costo prorrateado. */
+  resources?: ResourceCost[]
+  monthlyCost?: number | null
 }
 
-export function ProjectCard({ slug, name, url, status, avgResponseMs, checks }: ProjectCardProps) {
-  const frontCheck = checks.find((c) => c.check_name === 'front')
-  const dbCheck = checks.find((c) => c.check_name === 'api+db')
+const ROLE_META = {
+  frontend: { icon: Globe, label: 'Front' },
+  backend: { icon: Server, label: 'Back' },
+  database: { icon: Database, label: 'Base' },
+} as const
 
+/** Números chicos con decimal, grandes sin: 8.3 CU-h pero 221 CU-h. */
+function fmt(value: number, unit: string) {
+  if (unit === 'bytes') {
+    const mb = value / 1048576
+    return mb >= 100 ? `${Math.round(mb)} MB` : `${mb.toFixed(1)} MB`
+  }
+  const n = value >= 100 ? Math.round(value).toString() : value.toFixed(1)
+  return unit ? `${n} ${unit}` : n
+}
+
+export function ProjectCard({
+  slug,
+  name,
+  url,
+  status,
+  avgResponseMs,
+  checks,
+  resources = [],
+  monthlyCost = null,
+}: ProjectCardProps) {
   return (
     <Link
       href={`/project/${slug}`}
-      className="group block bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-4 hover:bg-zinc-900 hover:border-zinc-700/60 transition-all duration-200"
+      className="group flex flex-col bg-white border border-zinc-200 rounded-xl p-4 hover:border-zinc-300 hover:shadow-sm transition-all duration-200"
       style={{ animation: 'fade-in 0.3s ease-out both' }}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-bold text-zinc-100 truncate group-hover:text-white transition-colors">
-            {name}
-          </h3>
-          <p className="text-[11px] text-zinc-600 truncate mt-0.5">
+          <h3 className="text-sm font-bold text-zinc-900 truncate">{name}</h3>
+          <p className="text-[11px] text-zinc-400 truncate mt-0.5">
             {url.replace('https://', '')}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           <StatusBadge status={status as 'up' | 'down' | 'degraded' | 'unknown'} />
-          <ChevronRight size={14} className="text-zinc-700 group-hover:text-zinc-400 transition-colors" />
-        </div>
-      </div>
-
-      {/* Check indicators */}
-      <div className="flex items-center gap-3 text-[11px]">
-        <CheckIndicator
-          icon={<Globe size={11} />}
-          label="Front"
-          status={frontCheck?.status}
-          ms={frontCheck?.response_ms}
-        />
-        {dbCheck && (
-          <CheckIndicator
-            icon={<Database size={11} />}
-            label="API+DB"
-            status={dbCheck.status}
-            ms={dbCheck.response_ms}
+          <ChevronRight
+            size={14}
+            className="text-zinc-300 group-hover:text-zinc-500 transition-colors"
           />
-        )}
-        {!frontCheck && !dbCheck && (
-          <span className="text-zinc-600">No data yet</span>
-        )}
+        </div>
       </div>
 
-      {/* Response time bar */}
-      {avgResponseMs > 0 && (
-        <div className="mt-3 flex items-center gap-2">
-          <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${
-                avgResponseMs < 1000
-                  ? 'bg-emerald-500'
-                  : avgResponseMs < 3000
-                    ? 'bg-yellow-500'
-                    : 'bg-red-500'
-              }`}
-              style={{ width: `${Math.min(100, (avgResponseMs / 5000) * 100)}%` }}
-            />
-          </div>
-          <span className="text-[10px] text-zinc-500 tabular-nums flex items-center gap-1">
-            <Clock size={9} />
-            {avgResponseMs}ms
-          </span>
-        </div>
+      {/* Infraestructura: front, back y base en el mismo lugar. Es la pregunta
+          real —cuanto cuesta este proyecto— que mirando cada proveedor por
+          separado no se puede responder. */}
+      {resources.length > 0 && (
+        <ul className="space-y-1 mb-3">
+          {resources.map((r) => {
+            const meta = ROLE_META[r.role]
+            const Icon = meta.icon
+            return (
+              <li
+                key={`${r.provider}-${r.ref}`}
+                className="flex items-center gap-2 text-[11px]"
+              >
+                <Icon size={11} className="text-zinc-400 shrink-0" />
+                <span className="text-zinc-500 w-9 shrink-0">{meta.label}</span>
+                <span className="text-zinc-400 truncate flex-1">{r.provider}</span>
+                <span className="text-zinc-500 tabular-nums shrink-0">
+                  {fmt(r.value, r.unit)}
+                </span>
+                {r.cost !== null && (
+                  <span className="text-zinc-700 font-semibold tabular-nums shrink-0 w-14 text-right">
+                    US${r.cost.toFixed(2)}
+                  </span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
       )}
+
+      <div className="mt-auto pt-2 border-t border-zinc-100 flex items-center justify-between">
+        <span className="text-[10px] text-zinc-400">
+          {checks.length} check{checks.length === 1 ? '' : 's'} · {avgResponseMs} ms
+        </span>
+        {monthlyCost !== null ? (
+          <span className="text-xs font-bold text-zinc-900 tabular-nums">
+            US${monthlyCost.toFixed(2)}
+            <span className="text-[10px] font-normal text-zinc-400">/mes</span>
+          </span>
+        ) : (
+          <span className="text-[10px] text-zinc-300">sin costo asignado</span>
+        )}
+      </div>
     </Link>
-  )
-}
-
-function CheckIndicator({
-  icon,
-  label,
-  status,
-  ms,
-}: {
-  icon: React.ReactNode
-  label: string
-  status?: string
-  ms?: number
-}) {
-  const color = status === 'up'
-    ? 'text-emerald-400'
-    : status === 'down'
-      ? 'text-red-400'
-      : status === 'degraded'
-        ? 'text-yellow-400'
-        : 'text-zinc-600'
-
-  return (
-    <div className={`flex items-center gap-1 ${color}`}>
-      {icon}
-      <span className="font-medium">{label}</span>
-      {ms != null && <span className="text-zinc-600">{ms}ms</span>}
-    </div>
   )
 }

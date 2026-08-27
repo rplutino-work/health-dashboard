@@ -94,20 +94,20 @@ export default async function ProjectPage({
         <div className="flex items-center gap-4">
           <Link
             href="/"
-            className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-700 transition-all"
+            className="p-2.5 rounded-xl bg-white border border-zinc-200 text-zinc-500 hover:text-zinc-900 hover:border-zinc-300 transition-all"
           >
             <ArrowLeft size={16} />
           </Link>
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-xl font-bold text-white tracking-tight">{project.name}</h1>
+              <h1 className="text-xl font-bold text-zinc-900 tracking-tight">{project.name}</h1>
               <StatusBadge status={overallStatus as CheckStatus | 'unknown'} size="lg" />
             </div>
             <a
               href={project.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1.5 transition-colors"
+              className="text-xs text-zinc-500 hover:text-zinc-400 flex items-center gap-1.5 transition-colors"
             >
               {project.url.replace('https://', '')}
               <ExternalLink size={10} />
@@ -134,13 +134,13 @@ export default async function ProjectPage({
 
       {/* Uptime chart */}
       {historyBars.length > 0 && (
-        <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5 mb-6">
+        <div className="bg-white border border-zinc-200 rounded-xl p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-medium text-zinc-300">Uptime (24h)</h2>
+            <h2 className="text-sm font-medium text-zinc-400">Uptime (24h)</h2>
             <span className={`text-lg font-bold tabular-nums ${
-              uptimePercent >= 99 ? 'text-emerald-400'
-                : uptimePercent >= 90 ? 'text-yellow-400'
-                  : 'text-red-400'
+              uptimePercent >= 99 ? 'text-emerald-700'
+                : uptimePercent >= 90 ? 'text-amber-700'
+                  : 'text-red-700'
             }`}>
               {uptimePercent}%
             </span>
@@ -153,7 +153,7 @@ export default async function ProjectPage({
       <div className="space-y-2">
         <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Check Details</h2>
         {latestArray.length === 0 ? (
-          <div className="text-center py-12 text-sm text-zinc-600">
+          <div className="text-center py-12 text-sm text-zinc-400">
             No check data yet. Click Recheck to run the first check.
           </div>
         ) : (
@@ -188,12 +188,12 @@ function ArchCard({
 }) {
   if (noCheck) {
     return (
-      <div className="bg-zinc-900/30 border border-zinc-800/40 rounded-xl p-4 opacity-40">
-        <div className="flex items-center gap-2 text-zinc-600 mb-2">
+      <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 opacity-40">
+        <div className="flex items-center gap-2 text-zinc-400 mb-2">
           {icon}
           <span className="text-xs font-medium">{label}</span>
         </div>
-        <p className="text-[11px] text-zinc-700">Not applicable</p>
+        <p className="text-[11px] text-zinc-400">Not applicable</p>
       </div>
     )
   }
@@ -213,7 +213,7 @@ function ArchCard({
           <span className="text-[11px] text-zinc-500 tabular-nums">{check.response_ms}ms</span>
         </div>
       ) : (
-        <p className="text-[11px] text-zinc-600">No data</p>
+        <p className="text-[11px] text-zinc-400">No data</p>
       )}
     </div>
   )

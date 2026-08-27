@@ -9,7 +9,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Health Dashboard",
-  description: "Status monitor for all projects",
+  description: "Estado y costos de todos los proyectos",
 };
 
 export default function RootLayout({
@@ -18,9 +18,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${geistMono.variable} h-full antialiased dark`}>
-      <body className="min-h-full bg-zinc-950 text-zinc-100 font-[family-name:var(--font-geist-mono)]">
-        <main className="max-w-6xl mx-auto px-4 py-8">
+    <html lang="es" className={`${geistMono.variable} h-full antialiased`}>
+      <body className="min-h-full bg-[#f7f7f8] text-zinc-900 font-[family-name:var(--font-geist-mono)]">
+        <main className="max-w-6xl mx-auto px-4 py-8 sm:px-6">
           {children}
         </main>
       </body>

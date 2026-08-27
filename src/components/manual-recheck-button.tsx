@@ -24,7 +24,7 @@ export function ManualRecheckButton({ slug }: { slug: string }) {
     <button
       onClick={handleRecheck}
       disabled={loading}
-      className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white hover:border-zinc-700 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+      className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-zinc-200 rounded-lg text-xs font-medium text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 hover:border-zinc-300 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
     >
       <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
       {loading ? 'Checking...' : 'Recheck'}

@@ -2,8 +2,8 @@ import { supabase } from '@/lib/supabase'
 import { projects } from '@/config/projects'
 import { Header } from '@/components/header'
 import { ProjectCard } from '@/components/project-card'
-import { UsagePanel } from '@/components/usage-panel'
-import { getProratedUsage } from '@/lib/usage'
+import { CostPanel } from '@/components/cost-panel'
+import { getCostBreakdown, getMonthlyTrend } from '@/lib/costs'
 
 export const revalidate = 60
 
@@ -34,56 +34,38 @@ async function getData() {
   return { checks: (checks as HealthCheck[]) || [], lastRun }
 }
 
-
 /**
- * Consumo para el panel. Lee de provider_usage, que ya viene capturado por el
- * cron: la página no llama a las APIs de los proveedores, así que abrir el
- * dashboard no dispara pedidos ni consumo contra ellos.
+ * Métricas puntuales de Supabase. Van aparte del prorrateo porque no son un
+ * costo sino un techo: en el plan free lo que corta el servicio es pasarse de
+ * los 500 MB o de las conexiones, no gastar de más.
  */
-async function getUsage() {
-  const [neon, dbBytes, conns, maxConns, schemaRows] = await Promise.all([
-    getProratedUsage('neon', 'cu_hours'),
-    latestValue('supabase', 'db_bytes'),
-    latestValue('supabase', 'connections'),
-    latestValue('supabase', 'max_connections'),
-    getProratedUsage('supabase', 'schema_bytes'),
-  ])
-
-  const { data: last } = await supabase
-    .from('provider_usage')
-    .select('captured_at')
-    .order('captured_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  return {
-    neon: neon.filter((n) => n.value > 0),
-    supabase: {
-      dbBytes,
-      connections: conns,
-      maxConnections: maxConns,
-      schemas: schemaRows
-        .filter((r) => r.value > 0.05 * 1048576)
-        .map((r) => ({ name: r.project_name, bytes: r.value })),
-    },
-    capturedAt: last?.captured_at ?? null,
+async function getSupabaseLimits() {
+  const one = async (metric: string) => {
+    const { data } = await supabase
+      .from('provider_usage')
+      .select('value')
+      .eq('provider', 'supabase')
+      .eq('metric', metric)
+      .order('captured_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    return data ? Number(data.value) : null
   }
-}
-
-async function latestValue(provider: string, metric: string): Promise<number | null> {
-  const { data } = await supabase
-    .from('provider_usage')
-    .select('value')
-    .eq('provider', provider)
-    .eq('metric', metric)
-    .order('captured_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  return data ? Number(data.value) : null
+  const [dbBytes, connections, maxConnections] = await Promise.all([
+    one('db_bytes'),
+    one('connections'),
+    one('max_connections'),
+  ])
+  return { dbBytes, connections, maxConnections }
 }
 
 export default async function DashboardPage() {
-  const [{ checks, lastRun }, usage] = await Promise.all([getData(), getUsage()])
+  const [{ checks, lastRun }, breakdown, trend, supabaseLimits] = await Promise.all([
+    getData(),
+    getCostBreakdown(),
+    getMonthlyTrend(),
+    getSupabaseLimits(),
+  ])
 
   // Deduplicate: keep latest per project_slug+check_name
   const latest = new Map<string, HealthCheck>()
@@ -94,11 +76,10 @@ export default async function DashboardPage() {
     }
   }
 
-  // Build project statuses
+  const costBySlug = new Map(breakdown.projects.map((p) => [p.slug, p]))
+
   const projectStatuses = projects.map((project) => {
-    const projectChecks = [...latest.values()].filter(
-      (c) => c.project_slug === project.slug
-    )
+    const projectChecks = [...latest.values()].filter((c) => c.project_slug === project.slug)
 
     const status = projectChecks.some((c) => c.status === 'down')
       ? 'down'
@@ -111,21 +92,31 @@ export default async function DashboardPage() {
     const avgResponseMs =
       projectChecks.length > 0
         ? Math.round(
-            projectChecks.reduce((sum, c) => sum + (c.response_ms || 0), 0) /
-              projectChecks.length
+            projectChecks.reduce((sum, c) => sum + (c.response_ms || 0), 0) / projectChecks.length
           )
         : 0
 
-    return { ...project, status, avgResponseMs, checks: projectChecks }
+    const cost = costBySlug.get(project.slug)
+
+    return {
+      ...project,
+      status,
+      avgResponseMs,
+      checks: projectChecks,
+      resources: cost?.resources ?? [],
+      monthlyCost: cost?.total ?? null,
+    }
   })
 
-  // Sort: down first, then degraded, then up, then unknown
+  // Primero lo que está roto; a igual estado, lo que más cuesta. Un dashboard
+  // ordena por lo que necesita atención, no alfabéticamente.
   const order = { down: 0, degraded: 1, up: 2, unknown: 3 }
-  projectStatuses.sort(
-    (a, b) =>
-      (order[a.status as keyof typeof order] ?? 3) -
-      (order[b.status as keyof typeof order] ?? 3)
-  )
+  projectStatuses.sort((a, b) => {
+    const byStatus =
+      (order[a.status as keyof typeof order] ?? 3) - (order[b.status as keyof typeof order] ?? 3)
+    if (byStatus !== 0) return byStatus
+    return (b.monthlyCost ?? -1) - (a.monthlyCost ?? -1)
+  })
 
   const up = projectStatuses.filter((p) => p.status === 'up').length
   const degraded = projectStatuses.filter((p) => p.status === 'degraded').length
@@ -139,11 +130,10 @@ export default async function DashboardPage() {
         degraded={degraded}
         down={down}
         lastRun={lastRun?.finished_at || lastRun?.started_at || null}
+        monthlyTotal={breakdown.grandTotal}
       />
 
-      <div className="mb-5">
-        <UsagePanel neon={usage.neon} supabase={usage.supabase} capturedAt={usage.capturedAt} />
-      </div>
+      <CostPanel breakdown={breakdown} trend={trend} supabase={supabaseLimits} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {projectStatuses.map((project) => (
@@ -155,6 +145,8 @@ export default async function DashboardPage() {
             status={project.status}
             avgResponseMs={project.avgResponseMs}
             checks={project.checks}
+            resources={project.resources}
+            monthlyCost={project.monthlyCost}
           />
         ))}
       </div>

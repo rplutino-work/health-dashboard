@@ -18,14 +18,14 @@ export function CheckRow({ name, status, statusCode, responseMs, errorMessage, c
 
   return (
     <div
-      className="flex items-center gap-4 py-3.5 px-4 bg-zinc-900/50 border border-zinc-800/60 rounded-xl"
+      className="flex items-center gap-4 py-3.5 px-4 bg-white border border-zinc-200 rounded-xl"
       style={{ animation: 'slide-in 0.3s ease-out both' }}
     >
       {/* Icon */}
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-        status === 'up' ? 'bg-emerald-500/10 text-emerald-400'
-          : status === 'down' ? 'bg-red-500/10 text-red-400'
-            : 'bg-yellow-500/10 text-yellow-400'
+        status === 'up' ? 'bg-emerald-50 text-emerald-700'
+          : status === 'down' ? 'bg-red-50 text-red-700'
+            : 'bg-amber-50 text-amber-700'
       }`}>
         {icon}
       </div>
@@ -33,18 +33,18 @@ export function CheckRow({ name, status, statusCode, responseMs, errorMessage, c
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-medium text-zinc-200">{label}</p>
+          <p className="text-sm font-medium text-zinc-800">{label}</p>
           <StatusBadge status={status} />
         </div>
         {errorMessage && (
-          <p className="text-[11px] text-red-400/80 mt-0.5 truncate">{errorMessage}</p>
+          <p className="text-[11px] text-red-700/80 mt-0.5 truncate">{errorMessage}</p>
         )}
       </div>
 
       {/* Metrics */}
       <div className="flex items-center gap-5 text-[11px] text-zinc-500 flex-shrink-0">
         {statusCode && (
-          <span className={`font-mono ${statusCode >= 400 ? 'text-red-400' : 'text-zinc-400'}`}>
+          <span className={`font-mono ${statusCode >= 400 ? 'text-red-700' : 'text-zinc-400'}`}>
             {statusCode}
           </span>
         )}
@@ -52,7 +52,7 @@ export function CheckRow({ name, status, statusCode, responseMs, errorMessage, c
           <Clock size={10} />
           {responseMs}ms
         </span>
-        <span className="w-14 text-right text-zinc-600">{timeAgo}</span>
+        <span className="w-14 text-right text-zinc-400">{timeAgo}</span>
       </div>
     </div>
   )

@@ -1,15 +1,25 @@
 @import "tailwindcss";
 
+/**
+ * Tema claro. La paleta es casi toda gris: en un panel donde lo que importa es
+ * detectar un problema de un vistazo, el color tiene que estar reservado para el
+ * estado. Si las tarjetas, los bordes y los títulos compiten por atención, el
+ * rojo de una caída deja de saltar.
+ */
 @theme inline {
-  --color-background: #09090b;
-  --color-foreground: #fafafa;
-  --color-surface: #18181b;
-  --color-surface-2: #27272a;
-  --color-border: #3f3f46;
+  --color-background: #f7f7f8;
+  --color-foreground: #18181b;
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f4f5;
+  --color-border: #e4e4e7;
   --color-muted: #71717a;
-  --color-status-up: #22c55e;
-  --color-status-down: #ef4444;
-  --color-status-degraded: #eab308;
+
+  /* Tonos elegidos para que se distingan sobre blanco y entre sí incluso en
+     daltonismo rojo-verde: el ámbar y el rojo difieren también en luminosidad. */
+  --color-status-up: #15803d;
+  --color-status-down: #dc2626;
+  --color-status-degraded: #b45309;
+
   --font-mono: var(--font-geist-mono);
 }
 
@@ -32,4 +42,13 @@ body {
 @keyframes slide-in {
   from { opacity: 0; transform: translateX(-12px); }
   to { opacity: 1; transform: translateX(0); }
+}
+
+/* Quien prefiera menos movimiento no debería pelear con una animación por tarjeta. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
