@@ -3,7 +3,7 @@ import { projects } from '@/config/projects'
 import { Header } from '@/components/header'
 import { ProjectCard } from '@/components/project-card'
 import { CostPanel } from '@/components/cost-panel'
-import { getCostBreakdown, getMonthlyTrend } from '@/lib/costs'
+import { getCostBreakdown, getInvoices } from '@/lib/costs'
 
 export const revalidate = 60
 
@@ -60,10 +60,10 @@ async function getSupabaseLimits() {
 }
 
 export default async function DashboardPage() {
-  const [{ checks, lastRun }, breakdown, trend, supabaseLimits] = await Promise.all([
+  const [{ checks, lastRun }, breakdown, invoices, supabaseLimits] = await Promise.all([
     getData(),
     getCostBreakdown(),
-    getMonthlyTrend(),
+    getInvoices(),
     getSupabaseLimits(),
   ])
 
@@ -105,6 +105,7 @@ export default async function DashboardPage() {
       checks: projectChecks,
       resources: cost?.resources ?? [],
       monthlyCost: cost?.total ?? null,
+      spark: cost?.spark ?? [],
     }
   })
 
@@ -130,10 +131,10 @@ export default async function DashboardPage() {
         degraded={degraded}
         down={down}
         lastRun={lastRun?.finished_at || lastRun?.started_at || null}
-        monthlyTotal={breakdown.grandTotal}
+        monthlyTotal={breakdown.grandTotalToDate}
       />
 
-      <CostPanel breakdown={breakdown} trend={trend} supabase={supabaseLimits} />
+      <CostPanel breakdown={breakdown} invoices={invoices} supabase={supabaseLimits} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {projectStatuses.map((project) => (
@@ -147,6 +148,7 @@ export default async function DashboardPage() {
             checks={project.checks}
             resources={project.resources}
             monthlyCost={project.monthlyCost}
+            spark={project.spark}
           />
         ))}
       </div>

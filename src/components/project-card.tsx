@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ChevronRight, Globe, Server, Database } from 'lucide-react'
 import { StatusBadge } from './status-badge'
+import { Sparkline } from './sparkline'
 import type { ResourceCost } from '@/lib/costs'
 
 interface ProjectCardProps {
@@ -18,6 +19,8 @@ interface ProjectCardProps {
   /** Infraestructura del proyecto con su costo prorrateado. */
   resources?: ResourceCost[]
   monthlyCost?: number | null
+  /** Serie de consumo para la tendencia al lado del nombre. */
+  spark?: number[]
 }
 
 const ROLE_META = {
@@ -45,6 +48,7 @@ export function ProjectCard({
   checks,
   resources = [],
   monthlyCost = null,
+  spark = [],
 }: ProjectCardProps) {
   return (
     <Link
@@ -54,7 +58,10 @@ export function ProjectCard({
     >
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-bold text-zinc-900 truncate">{name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-zinc-900 truncate">{name}</h3>
+            <Sparkline values={spark} className="shrink-0 opacity-70" />
+          </div>
           <p className="text-[11px] text-zinc-400 truncate mt-0.5">
             {url.replace('https://', '')}
           </p>

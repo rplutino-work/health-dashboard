@@ -82,6 +82,13 @@ export async function collectNeon(
     // Instantánea, no acumulada: no lleva delta.
     push('storage_bytes', p.synthetic_storage_size ?? 0, 'bytes')
 
+    // Cierre del ciclo de facturación, tal como lo publica Neon. Sin esto habría
+    // que asumir mes calendario, y el ciclo de cada proveedor arranca cuando
+    // quiere: el consumo "del mes" no significa nada sin saber cuándo corta.
+    if (p.quota_reset_at) {
+      push('cycle_reset_at_ms', Date.parse(p.quota_reset_at), 'ms')
+    }
+
     const last = p.compute_last_active_at ? Date.parse(p.compute_last_active_at) : null
     meta.push({
       ref: p.id,
