@@ -1,14 +1,8 @@
-import { AlertCircle, HardDrive, Plug, CalendarClock, Ruler, FileText } from 'lucide-react'
+import { AlertCircle, HardDrive, Plug, CalendarClock, Ruler } from 'lucide-react'
 import type { CostBreakdown } from '@/lib/costs'
 
 interface CostPanelProps {
   breakdown: CostBreakdown
-  invoices: Array<{
-    provider: string
-    periodStart: string
-    periodEnd: string
-    amount: number
-  }>
   supabase: {
     dbBytes: number | null
     connections: number | null
@@ -30,9 +24,24 @@ function d(iso: string) {
   return `${day}/${m}`
 }
 
-export function CostPanel({ breakdown, invoices, supabase }: CostPanelProps) {
-  const { cycles, grandTotalToDate, grandTotalProjected, unattributed, capturedAt } = breakdown
-  const active = cycles.filter((c) => c.configured && (c.consumed > 0 || c.costToDate > 0))
+/** Nombres legibles para las líneas de la factura. */
+const LABELS: Record<string, string> = {
+  observability_events: 'Observability',
+  build_cpu: 'Build CPU',
+  fluid_active_cpu: 'CPU activa',
+  function_invocations: 'Invocaciones',
+  fast_origin_transfer: 'Transfer origen',
+  fluid_provisioned_memory: 'Memoria',
+  image_optimization: 'Imágenes',
+  subscription: 'Suscripción',
+  credits_applied: 'Créditos',
+  compute: 'Compute',
+  storage: 'Storage',
+}
+
+export function CostPanel({ breakdown, supabase }: CostPanelProps) {
+  const { charges, totalToDate, totalProjected, unattributed, capturedAt, missingCharges } =
+    breakdown
 
   const dbPct = supabase.dbBytes ? (supabase.dbBytes / MB / SUPABASE_FREE_LIMIT_MB) * 100 : 0
   const connPct =
@@ -42,19 +51,52 @@ export function CostPanel({ breakdown, invoices, supabase }: CostPanelProps) {
 
   return (
     <section className="space-y-3 mb-6">
-      {/* Aclaracion sobre el origen de los numeros. Va primero y no escondida:
-          confundir un calculo con una factura es el error que hace que nadie
-          vuelva a confiar en el panel. */}
+      {/* Total real arriba de todo. */}
+      <div className="bg-zinc-900 text-white rounded-xl p-5 flex flex-wrap items-center justify-between gap-6">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-zinc-400">
+            Infraestructura · cargos reales a hoy
+          </p>
+          <p className="text-3xl font-bold tabular-nums leading-tight">
+            US${totalToDate.toFixed(2)}
+          </p>
+          <p className="text-[10px] text-zinc-500 mt-0.5">
+            suma de ciclos que no coinciden entre sí
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-zinc-400">
+            Proyectado al cierre
+          </p>
+          <p className="text-3xl font-bold tabular-nums leading-tight text-amber-300">
+            US${totalProjected.toFixed(2)}
+          </p>
+        </div>
+        <div className="flex gap-4">
+          {charges.map((c) => (
+            <div key={c.provider} className="text-right">
+              <p className="text-[10px] uppercase tracking-wider text-zinc-400 capitalize">
+                {c.provider}
+              </p>
+              <p className="text-lg font-bold tabular-nums leading-tight">
+                US${c.amountToDate.toFixed(0)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="flex items-start gap-2 text-[11px] text-zinc-500 bg-zinc-100/70 border border-zinc-200 rounded-lg px-3 py-2">
         <Ruler size={13} className="mt-0.5 shrink-0 text-zinc-400" />
         <p className="leading-relaxed">
-          El <strong className="text-zinc-700">consumo es medido</strong> de la API de cada
-          proveedor. Los <strong className="text-zinc-700">precios son los del plan</strong> que
-          cargaste, no una factura: ningún proveedor expone su facturación por API.
+          Los <strong className="text-zinc-700">montos son reales</strong>, tomados del panel de
+          facturación de cada proveedor. El{' '}
+          <strong className="text-zinc-700">reparto entre proyectos es derivado</strong>: se
+          prorratea según el consumo medido por API.
           {capturedAt && (
             <>
               {' '}
-              Última medición{' '}
+              Consumo medido{' '}
               {new Date(capturedAt).toLocaleString('es-AR', {
                 timeZone: 'America/Argentina/Buenos_Aires',
                 day: '2-digit',
@@ -65,139 +107,99 @@ export function CostPanel({ breakdown, invoices, supabase }: CostPanelProps) {
               .
             </>
           )}
+          {missingCharges.length > 0 && (
+            <>
+              {' '}
+              Sin cargo cargado:{' '}
+              <strong className="text-amber-700">{missingCharges.join(', ')}</strong>.
+            </>
+          )}
         </p>
       </div>
 
-      {/* ── Un bloque por proveedor con SU ciclo ─────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {active.map((c) => {
-          const overage = Math.max(0, c.consumed - c.includedUnits)
-          const projOverage = Math.max(0, c.projected - c.includedUnits)
-          const usePct = c.includedUnits > 0 ? (c.consumed / c.includedUnits) * 100 : 0
-          return (
-            <div key={c.provider} className="bg-white border border-zinc-200 rounded-xl p-4">
-              <div className="flex items-baseline justify-between mb-1">
-                <h3 className="text-sm font-bold text-zinc-900 capitalize">
-                  {c.provider}
-                  {c.plan && (
-                    <span className="ml-2 text-[10px] font-normal text-zinc-400 uppercase tracking-wider">
-                      {c.plan}
-                    </span>
-                  )}
-                </h3>
-                <span className="text-[11px] text-zinc-400 flex items-center gap-1">
-                  <CalendarClock size={11} />
-                  {d(c.start)} → {d(c.end)}
-                </span>
-              </div>
+      {/* ── Un bloque por proveedor, cada uno con SU ciclo ────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        {charges
+          .filter((c) => c.amountToDate > 0 || c.plan !== 'Free')
+          .map((c) => {
+            const lines = Object.entries(c.breakdown ?? {})
+              .map(([k, v]) => ({ key: k, ...v }))
+              .filter((l) => typeof l.charge === 'number' && Math.abs(l.charge) >= 0.01)
+              .sort((a, b) => Math.abs(b.charge) - Math.abs(a.charge))
+            const projected = c.amountProjected ?? c.ownProjection
 
-              {/* Avance del ciclo: sin esto, "600 CU-h" no dice si es mucho. */}
-              <div className="flex items-center gap-2 mb-3">
-                <div className="flex-1 h-1 bg-zinc-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-zinc-300 rounded-full"
-                    style={{ width: `${c.pctElapsed}%` }}
-                  />
+            return (
+              <div key={c.provider} className="bg-white border border-zinc-200 rounded-xl p-4">
+                <div className="flex items-baseline justify-between mb-1">
+                  <h3 className="text-sm font-bold text-zinc-900 capitalize">
+                    {c.provider}
+                    {c.plan && (
+                      <span className="ml-2 text-[10px] font-normal text-zinc-400 uppercase tracking-wider">
+                        {c.plan}
+                      </span>
+                    )}
+                  </h3>
+                  <span className="text-[10px] text-zinc-400 flex items-center gap-1">
+                    <CalendarClock size={10} />
+                    {d(c.cycleStart)} → {d(c.cycleEnd)}
+                  </span>
                 </div>
-                <span className="text-[10px] text-zinc-400 tabular-nums shrink-0">
-                  {c.pctElapsed.toFixed(0)}% del ciclo
-                </span>
-              </div>
 
-              {c.includedUnits > 0 && (
-                <div className="mb-3">
-                  <div className="flex items-baseline justify-between text-[11px] mb-1">
-                    <span className="text-zinc-500">
-                      {c.consumed.toFixed(0)} {c.unit} de {c.includedUnits} incluidas
-                    </span>
-                    <span
-                      className={`tabular-nums font-semibold ${usePct > 100 ? 'text-red-600' : 'text-zinc-500'}`}
-                    >
-                      {usePct.toFixed(0)}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="flex-1 h-1 bg-zinc-100 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${usePct > 100 ? 'bg-red-500' : 'bg-emerald-600'}`}
-                      style={{ width: `${Math.min(usePct, 100)}%` }}
+                      className="h-full bg-zinc-300 rounded-full"
+                      style={{ width: `${c.pctElapsed}%` }}
                     />
                   </div>
-                  {overage > 0 && (
-                    <p className="text-[10px] text-red-600 mt-1">
-                      {overage.toFixed(0)} {c.unit} por encima de lo incluido
-                    </p>
-                  )}
+                  <span className="text-[10px] text-zinc-400 tabular-nums shrink-0">
+                    {c.pctElapsed.toFixed(0)}% · faltan {c.daysLeft.toFixed(0)}d
+                  </span>
                 </div>
-              )}
 
-              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-100">
-                <div>
-                  <p className="text-[10px] text-zinc-400 uppercase tracking-wider">A hoy</p>
-                  <p className="text-lg font-bold text-zinc-900 tabular-nums leading-tight">
-                    US${c.costToDate.toFixed(2)}
-                  </p>
+                <div className="flex items-baseline gap-3 mb-3">
+                  <div>
+                    <p className="text-[10px] text-zinc-400 uppercase tracking-wider">A hoy</p>
+                    <p className="text-xl font-bold text-zinc-900 tabular-nums leading-tight">
+                      US${c.amountToDate.toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-zinc-400 uppercase tracking-wider">Al cierre</p>
+                    <p className="text-xl font-bold text-amber-700 tabular-nums leading-tight">
+                      US${projected.toFixed(2)}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[10px] text-zinc-400 uppercase tracking-wider">
-                    Al cierre (est.)
-                  </p>
-                  <p
-                    className={`text-lg font-bold tabular-nums leading-tight ${
-                      projOverage > 0 ? 'text-amber-700' : 'text-zinc-900'
-                    }`}
-                  >
-                    US${c.costProjected.toFixed(2)}
-                  </p>
-                  <p className="text-[10px] text-zinc-400">
-                    {c.projected.toFixed(0)} {c.unit}
-                  </p>
-                </div>
+
+                {/* Desglose de la factura: donde esta el gasto de verdad. */}
+                {lines.length > 0 && (
+                  <ul className="space-y-1 pt-3 border-t border-zinc-100">
+                    {lines.slice(0, 6).map((l) => (
+                      <li key={l.key} className="flex items-baseline justify-between text-[11px]">
+                        <span className="text-zinc-500 truncate">
+                          {LABELS[l.key] ?? l.key}
+                          {l.usage && (
+                            <span className="text-zinc-300 ml-1.5">{l.usage}</span>
+                          )}
+                        </span>
+                        <span
+                          className={`tabular-nums shrink-0 ml-2 font-semibold ${
+                            l.charge < 0 ? 'text-emerald-700' : 'text-zinc-700'
+                          }`}
+                        >
+                          {l.charge < 0 ? '−' : ''}US${Math.abs(l.charge).toFixed(2)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
       </div>
 
-      {/* ── Total y contraste contra facturas reales ─────────────────────── */}
-      {grandTotalToDate !== null && (
-        <div className="bg-zinc-900 text-white rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-zinc-400">
-              Total infraestructura · a hoy
-            </p>
-            <p className="text-2xl font-bold tabular-nums leading-tight">
-              US${grandTotalToDate.toFixed(2)}
-            </p>
-          </div>
-          {grandTotalProjected !== null && (
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-zinc-400">
-                Proyectado al cierre
-              </p>
-              <p className="text-2xl font-bold tabular-nums leading-tight text-amber-300">
-                US${grandTotalProjected.toFixed(2)}
-              </p>
-            </div>
-          )}
-          {invoices.length > 0 && (
-            <div className="text-right">
-              <p className="text-[10px] uppercase tracking-wider text-zinc-400 flex items-center gap-1 justify-end">
-                <FileText size={10} /> Última factura real
-              </p>
-              <p className="text-lg font-bold tabular-nums leading-tight">
-                US${invoices[0].amount.toFixed(2)}
-                <span className="text-[10px] font-normal text-zinc-400 ml-1">
-                  {invoices[0].provider} · {d(invoices[0].periodStart)}
-                </span>
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {/* Límites del free de Supabase: acá el riesgo no es gastar de más sino
-            que corten el servicio. */}
         <div className="bg-white border border-zinc-200 rounded-xl p-4">
           <h3 className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-3">
             Supabase · límites del plan free
@@ -241,12 +243,8 @@ export function CostPanel({ breakdown, invoices, supabase }: CostPanelProps) {
               </div>
             </div>
           </div>
-          <p className="text-[10px] text-zinc-400 mt-3">
-            El ancho de banda no figura: Supabase no lo expone por API.
-          </p>
         </div>
 
-        {/* Plata que se paga sin dueño. */}
         {unattributed.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
             <h3 className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -265,9 +263,6 @@ export function CostPanel({ breakdown, invoices, supabase }: CostPanelProps) {
                 </li>
               ))}
             </ul>
-            <p className="text-[10px] text-amber-700 mt-2">
-              Mapealos en src/config/resources.ts para atribuirles el gasto.
-            </p>
           </div>
         )}
       </div>
