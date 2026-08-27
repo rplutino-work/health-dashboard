@@ -69,9 +69,12 @@ async function handler(request: NextRequest) {
   // Consumo de los proveedores. Se lee de sus APIs de control, no de las bases:
   // mirar cuanto gasta Neon no despierta ningun compute ni suma a la factura.
   // Con su propio intervalo, para no guardar la misma cifra 48 veces al dia.
+  // ?force=usage salta el intervalo, para refrescar a mano tras un cambio grande
+  // (una migracion, una purga) sin esperar a la proxima ventana.
+  const force = new URL(request.url).searchParams.get('force') === 'usage'
   let usage: Awaited<ReturnType<typeof collectAllUsage>> | null = null
   try {
-    if (await shouldCollectUsage()) {
+    if (force || (await shouldCollectUsage())) {
       usage = await collectAllUsage()
     }
   } catch (err) {
