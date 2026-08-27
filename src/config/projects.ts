@@ -60,6 +60,14 @@ export const projects: ProjectConfig[] = [
       { name: 'front', type: 'frontend', path: '/' },
     ],
   },
+  {
+    slug: 'pleyade',
+    name: 'Pleyade',
+    url: 'https://pleyade-66um5rht4-rodrigos-projects-8b995206.vercel.app',
+    checks: [
+      { name: 'front', type: 'frontend', path: '/' },
+    ],
+  },
   // ── Frontends sin back propio ────────────────────────────────
   {
     slug: 'argentum-web',

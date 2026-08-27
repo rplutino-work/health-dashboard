@@ -6,6 +6,7 @@ import { projects } from '@/config/projects'
 import { collectAllUsage } from '@/lib/usage'
 import { shouldCollectUsage, runDailyMaintenance } from '@/lib/maintenance'
 import { processCostAlerts, sendDailyDigest } from '@/lib/cost-alerts'
+import { snapshotBilling } from '@/lib/billing-history'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -90,6 +91,17 @@ async function handler(request: NextRequest) {
     console.error('Maintenance error:', err)
   }
 
+  // Foto del estado de cada ciclo. Va junto con la captura de consumo para que
+  // el snapshot refleje los mismos numeros que se acaban de medir.
+  let billing = null
+  if (usage) {
+    try {
+      billing = await snapshotBilling()
+    } catch (err) {
+      console.error('Billing snapshot error:', err)
+    }
+  }
+
   // Avisos de plata y limites. Van despues de capturar consumo para que miren
   // datos frescos, no los de la corrida anterior.
   let costAlerts = null
@@ -125,5 +137,6 @@ async function handler(request: NextRequest) {
     maintenance,
     costAlerts,
     digest,
+    billing,
   })
 }

@@ -5,6 +5,8 @@ import { ProjectCard } from '@/components/project-card'
 import { CostPanel } from '@/components/cost-panel'
 import { getCostBreakdown, getFx } from '@/lib/costs'
 import { CostBars, FxCard } from '@/components/cost-bars'
+import { HistoryPanel } from '@/components/history-panel'
+import { getClosedCycles, getCycleProgress } from '@/lib/billing-history'
 
 export const revalidate = 60
 
@@ -61,12 +63,15 @@ async function getSupabaseLimits() {
 }
 
 export default async function DashboardPage() {
-  const [{ checks, lastRun }, breakdown, supabaseLimits, fx] = await Promise.all([
-    getData(),
-    getCostBreakdown(),
-    getSupabaseLimits(),
-    getFx(),
-  ])
+  const [{ checks, lastRun }, breakdown, supabaseLimits, fx, closedCycles, cycleProgress] =
+    await Promise.all([
+      getData(),
+      getCostBreakdown(),
+      getSupabaseLimits(),
+      getFx(),
+      getClosedCycles(),
+      getCycleProgress('neon'),
+    ])
 
   // Deduplicate: keep latest per project_slug+check_name
   const latest = new Map<string, HealthCheck>()
@@ -152,6 +157,8 @@ export default async function DashboardPage() {
           projectedUsd={breakdown.totalProjected}
         />
       </div>
+
+      <HistoryPanel closed={closedCycles} progress={cycleProgress} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {projectStatuses.map((project) => (

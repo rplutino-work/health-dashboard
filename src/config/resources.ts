@@ -44,6 +44,9 @@ export const RESOURCES: Record<string, ProjectResources> = {
   },
   'ecommerce-kit': { neon: 'muddy-silence-59839518', vercel: 'ecommerce-kit' },
   'powerseries-club': { neon: 'jolly-union-61600763', vercel: 'powerseries-club' },
+  // Base de musica: 213k canciones, 125k tags, 7k resenas. Aparecia como
+  // "consumo sin asignar" hasta que se rastreo que pleyade la usa.
+  pleyade: { neon: 'tiny-fog-60155655', vercel: 'pleyade' },
   'frutos-secos-dg-admin': { vercel: 'frutos-secos-dg-admin' },
   'rok-admin': { neon: 'plain-bread-34489395', vercel: 'rok-admin' },
   // plasdeko: la base salió de Neon a Railway el 27/08/2026. Falta el service id
