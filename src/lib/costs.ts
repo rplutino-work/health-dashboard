@@ -290,3 +290,19 @@ export async function getFx(days = 30): Promise<FxSnapshot> {
     series,
   }
 }
+
+/** Facturas reales ya emitidas: historia verificada, anterior al dashboard. */
+export async function getInvoices(limit = 12) {
+  const { data } = await supabase
+    .from('provider_invoices')
+    .select('*')
+    .order('period_start', { ascending: false })
+    .limit(limit)
+  return (data ?? []).map((r) => ({
+    provider: r.provider as string,
+    periodStart: r.period_start as string,
+    periodEnd: r.period_end as string,
+    amount: Number(r.amount),
+    note: (r.note as string) ?? null,
+  }))
+}

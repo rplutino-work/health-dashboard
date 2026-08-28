@@ -17,6 +17,30 @@ import type { UsageSample } from '@/lib/types'
 
 const SUPA_API = 'https://api.supabase.com/v1'
 
+/**
+ * Schemas que crea Supabase para su propia plataforma. No son proyectos y nadie
+ * los puede "asignar": aparecian en el panel como consumo sin dueno, sugiriendo
+ * un problema donde solo hay infraestructura del proveedor.
+ */
+const PLATFORM_SCHEMAS = new Set([
+  'auth',
+  'storage',
+  'realtime',
+  '_realtime',
+  'vault',
+  'cron',
+  'extensions',
+  'graphql',
+  'graphql_public',
+  'net',
+  'pgsodium',
+  'pgsodium_masks',
+  'pgbouncer',
+  'supabase_functions',
+  'supabase_migrations',
+  '_analytics',
+])
+
 const USAGE_SQL = `
   select
     (select pg_database_size(current_database()))::bigint            as db_bytes,
@@ -84,6 +108,8 @@ export async function collectSupabase(
   // compartirían identificador y, al quedarse con la última de cada recurso, el
   // dashboard mostraría el peso de un schema cualquiera para todos.
   for (const s of row.schemas ?? []) {
+    // Los schemas de la plataforma no son consumo atribuible a nadie.
+    if (PLATFORM_SCHEMAS.has(s.schema)) continue
     samples.push({
       ...base,
       resource_ref: `${projectRef}/${s.schema}`,

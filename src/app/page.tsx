@@ -7,6 +7,7 @@ import { getCostBreakdown, getFx } from '@/lib/costs'
 import { CostBars, FxCard } from '@/components/cost-bars'
 import { HistoryPanel } from '@/components/history-panel'
 import { getClosedCycles, getCycleProgress } from '@/lib/billing-history'
+import { getInvoices } from '@/lib/costs'
 
 export const revalidate = 60
 
@@ -63,7 +64,7 @@ async function getSupabaseLimits() {
 }
 
 export default async function DashboardPage() {
-  const [{ checks, lastRun }, breakdown, supabaseLimits, fx, closedCycles, cycleProgress] =
+  const [{ checks, lastRun }, breakdown, supabaseLimits, fx, closedCycles, cycleProgress, invoices] =
     await Promise.all([
       getData(),
       getCostBreakdown(),
@@ -71,6 +72,7 @@ export default async function DashboardPage() {
       getFx(),
       getClosedCycles(),
       getCycleProgress('neon'),
+      getInvoices(),
     ])
 
   // Deduplicate: keep latest per project_slug+check_name
@@ -158,7 +160,7 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <HistoryPanel closed={closedCycles} progress={cycleProgress} />
+      <HistoryPanel closed={closedCycles} progress={cycleProgress} invoices={invoices} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {projectStatuses.map((project) => (

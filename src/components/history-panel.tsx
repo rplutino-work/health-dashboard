@@ -1,11 +1,21 @@
 import { History, TrendingUp } from 'lucide-react'
 import type { HistoryRow } from '@/lib/billing-history'
 
+interface Invoice {
+  provider: string
+  periodStart: string
+  periodEnd: string
+  amount: number
+  note: string | null
+}
+
 interface HistoryPanelProps {
   /** Ciclos ya cerrados: el valor definitivo de cada período. */
   closed: HistoryRow[]
   /** Snapshots del ciclo en curso, para ver cómo viene. */
   progress: HistoryRow[]
+  /** Facturas reales ya emitidas: historia verificada, anterior al dashboard. */
+  invoices: Invoice[]
 }
 
 function fmtDate(iso: string) {
@@ -19,8 +29,8 @@ function cycleLabel(start: string) {
   return `${MONTHS[Number(m) - 1]} ${y.slice(2)}`
 }
 
-export function HistoryPanel({ closed, progress }: HistoryPanelProps) {
-  const hasHistory = closed.length > 0
+export function HistoryPanel({ closed, progress, invoices }: HistoryPanelProps) {
+  const hasHistory = closed.length > 0 || invoices.length > 0
   const hasProgress = progress.length > 1
 
   return (
@@ -39,6 +49,24 @@ export function HistoryPanel({ closed, progress }: HistoryPanelProps) {
           </p>
         ) : (
           <ul className="space-y-2">
+            {/* Facturas ya emitidas: historia real anterior al dashboard. */}
+            {invoices.map((inv) => (
+              <li
+                key={`${inv.provider}-${inv.periodStart}`}
+                className="flex items-baseline justify-between gap-2 text-[12px] pb-2 border-b border-zinc-100 last:border-0"
+              >
+                <span className="text-zinc-600 truncate">
+                  <span className="capitalize font-medium text-zinc-800">{inv.provider}</span>
+                  <span className="text-zinc-400 ml-1.5">{fmtDate(inv.periodStart)}</span>
+                  {inv.note && (
+                    <span className="text-zinc-300 ml-1.5 text-[10px]">{inv.note}</span>
+                  )}
+                </span>
+                <span className="tabular-nums shrink-0 font-bold text-zinc-900">
+                  US${inv.amount.toFixed(2)}
+                </span>
+              </li>
+            ))}
             {closed.map((h) => (
               <li
                 key={`${h.provider}-${h.cycleStart}`}
