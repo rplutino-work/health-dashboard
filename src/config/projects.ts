@@ -68,6 +68,14 @@ export const projects: ProjectConfig[] = [
       { name: 'front', type: 'frontend', path: '/' },
     ],
   },
+  {
+    slug: 'health-dashboard',
+    name: 'Health Dashboard',
+    url: 'https://health-dashboard-kohl-delta.vercel.app',
+    checks: [
+      { name: 'front', type: 'frontend', path: '/' },
+    ],
+  },
   // ── Frontends sin back propio ────────────────────────────────
   {
     slug: 'argentum-web',

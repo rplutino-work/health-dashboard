@@ -50,6 +50,10 @@ export const RESOURCES: Record<string, ProjectResources> = {
   // fungis es la base de Estado de Caja: figuraba como huerfana porque el nombre
   // del proyecto en Neon no se parece en nada al del sitio que la usa.
   estadodecaja: { neon: 'spring-math-40112672', vercel: 'estadodecaja' },
+  // El dashboard tambien ocupa lugar: su schema es el 'public' de la misma base.
+  // Sin esta entrada su consumo figuraba como "sin asignar", que es justo lo que
+  // el panel usa para senalar recursos sin dueno.
+  'health-dashboard': { supabase: 'kucydhmobdcaihnpogqt/public', vercel: 'health-dashboard' },
   'frutos-secos-dg-admin': { vercel: 'frutos-secos-dg-admin' },
   'rok-admin': { neon: 'plain-bread-34489395', vercel: 'rok-admin' },
   // plasdeko: la base salió de Neon a Railway el 27/08/2026. Falta el service id
