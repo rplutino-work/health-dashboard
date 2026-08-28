@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
 import { supabase } from '@/lib/supabase'
-import { alertConfig } from '@/config/projects'
+import { alertConfig, projects } from '@/config/projects'
 import { getCostBreakdown, getFx } from '@/lib/costs'
 import { renderEmail, subjectFor, renderBarChart, type EmailRow } from '@/lib/email-templates'
 
@@ -202,8 +202,12 @@ async function checkSupabaseLimits() {
  * Va una vez por día para que exista un momento fijo en que uno se entera de
  * cómo viene todo, sin depender de que algo se rompa.
  */
-export async function sendDailyDigest(): Promise<boolean> {
-  if (await alreadySent('daily_digest', 20)) return false
+/**
+ * @param force Ignora el cooldown de 20 h. Solo para reenvio manual — sirve para
+ *   ver el mail cuando hace falta sin esperar al dia siguiente.
+ */
+export async function sendDailyDigest(force = false): Promise<boolean> {
+  if (!force && (await alreadySent('daily_digest', 20))) return false
 
   const [breakdown, fx] = await Promise.all([getCostBreakdown(), getFx()])
   const rate = fx.oficial ?? fx.tarjeta
@@ -218,6 +222,11 @@ export async function sendDailyDigest(): Promise<boolean> {
   const down = lastRun?.failed ?? 0
   const degraded = lastRun?.degraded ?? 0
   const severity = down > 0 ? 'critical' : degraded > 0 ? 'warning' : 'ok'
+
+  // QUE sitios estan caidos, no solo cuantos. Un "3 con problemas" obliga a
+  // abrir el dashboard para saber si hay que salir corriendo o puede esperar;
+  // con los nombres en el mail la decision se toma desde el celular.
+  const failing = await getFailingChecks()
 
   // Grafico de barras del gasto por proyecto: en un resumen diario un ranking se
   // lee de un vistazo, una lista de numeros hay que compararla mentalmente.
@@ -262,14 +271,24 @@ export async function sendDailyDigest(): Promise<boolean> {
     subject: subjectFor(
       severity,
       down > 0
-        ? `${down} proyecto${down > 1 ? 's' : ''} caído${down > 1 ? 's' : ''} · US$${breakdown.totalProjected.toFixed(0)} proyectados`
+        ? // Con un solo caído el asunto lo nombra: es lo único que se lee en la
+          // notificación del celular, y "Storefront caído" decide más que "1 caído".
+          failing.down.length === 1
+          ? `${failing.down[0].name} caído · US$${breakdown.totalProjected.toFixed(0)} proyectados`
+          : `${down} proyectos caídos: ${failing.down.slice(0, 2).map((f) => f.name).join(', ')}${down > 2 ? '…' : ''}`
         : `Todo OK · US$${breakdown.totalProjected.toFixed(0)} proyectados este ciclo`
     ),
     html: renderEmail({
       severity,
-      title: down > 0 ? `${down} proyecto${down > 1 ? 's' : ''} caído${down > 1 ? 's' : ''}` : 'Todo funcionando',
+      title:
+        down > 0
+          ? failing.down.length === 1
+            ? `${failing.down[0].name} está caído`
+            : `${down} proyectos caídos`
+          : 'Todo funcionando',
       subtitle: `Resumen del día · ${breakdown.projects.length} proyectos con consumo atribuido`,
       body: `
+      ${renderFailingList(failing)}
       ${providerChart ? `<p style="margin:0 0 4px;font-weight:600;">Por proveedor</p>${providerChart}` : ''}
       ${chart ? `<p style="margin:16px 0 4px;font-weight:600;">Por proyecto</p>${chart}` : ''}
     `,
@@ -280,4 +299,92 @@ export async function sendDailyDigest(): Promise<boolean> {
   })
   await logSystemAlert('daily_digest')
   return true
+}
+
+interface FailingCheck {
+  slug: string
+  name: string
+  url: string
+  check: string
+  status: string
+  statusCode: number | null
+  error: string | null
+}
+
+/**
+ * Qué está fallando ahora mismo, con nombre y motivo.
+ *
+ * Se toma la última medición de cada par (proyecto, check) y no el conteo del
+ * run: así el mail no lista algo que ya se recuperó entre corridas.
+ */
+async function getFailingChecks(): Promise<{ down: FailingCheck[]; degraded: FailingCheck[] }> {
+  // Piso de 6 h: si un proyecto dejo de chequearse (se saco de la config, se
+  // dio de baja) no tiene que seguir apareciendo como caido con una medicion
+  // vieja. 300 filas cubren mas de diez corridas de los ~23 checks actuales.
+  const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
+  const { data } = await supabase
+    .from('health_checks')
+    .select('project_slug, check_name, status, status_code, error_message, checked_at')
+    .gte('checked_at', since)
+    .order('checked_at', { ascending: false })
+    .limit(300)
+
+  const latest = new Map<string, FailingCheck & { status: string }>()
+  const bySlug = new Map(projects.map((p) => [p.slug, p]))
+
+  for (const r of data ?? []) {
+    const key = `${r.project_slug}:${r.check_name}`
+    if (latest.has(key)) continue
+    const p = bySlug.get(r.project_slug)
+    latest.set(key, {
+      slug: r.project_slug,
+      name: p?.name ?? r.project_slug,
+      url: p?.url ?? '',
+      check: r.check_name,
+      status: r.status,
+      statusCode: r.status_code,
+      error: r.error_message,
+    })
+  }
+
+  const all = [...latest.values()]
+  return {
+    down: all.filter((c) => c.status === 'down'),
+    degraded: all.filter((c) => c.status === 'degraded'),
+  }
+}
+
+/** Lista de caídos y degradados para el cuerpo del mail. */
+function renderFailingList(f: { down: FailingCheck[]; degraded: FailingCheck[] }): string {
+  if (f.down.length === 0 && f.degraded.length === 0) {
+    return '<p style="margin:0 0 14px;color:#15803d;font-weight:600;">Todos los sitios responden bien.</p>'
+  }
+
+  const row = (c: FailingCheck, color: string) => `
+    <tr>
+      <td style="padding:6px 8px 6px 0;font-size:12px;color:#18181b;font-weight:600;white-space:nowrap;">${esc(c.name)}</td>
+      <td style="padding:6px 0;font-size:11px;color:#71717a;">${esc(c.url.replace('https://', ''))}</td>
+      <td style="padding:6px 0 6px 8px;font-size:11px;color:${color};font-weight:600;text-align:right;white-space:nowrap;">${esc(c.error || String(c.statusCode ?? ''))}</td>
+    </tr>`
+
+  const sections: string[] = []
+  if (f.down.length) {
+    sections.push(`
+      <p style="margin:0 0 4px;font-weight:600;color:#dc2626;">Caídos (${f.down.length})</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px;">
+        ${f.down.map((c) => row(c, '#dc2626')).join('')}
+      </table>`)
+  }
+  if (f.degraded.length) {
+    sections.push(`
+      <p style="margin:0 0 4px;font-weight:600;color:#b45309;">Lentos o protegidos (${f.degraded.length})</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px;">
+        ${f.degraded.map((c) => row(c, '#b45309')).join('')}
+      </table>`)
+  }
+  return sections.join('')
+}
+
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }

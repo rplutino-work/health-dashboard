@@ -122,7 +122,9 @@ async function handler(request: NextRequest) {
         hour12: false,
       })
     )
-    if (hourArg >= 9) digest = await sendDailyDigest()
+    // ?digest=force reenvia el resumen aunque ya se haya mandado hoy.
+    const forced = request.nextUrl.searchParams.get('digest') === 'force'
+    if (forced || hourArg >= 9) digest = await sendDailyDigest(forced)
   } catch (err) {
     console.error('Digest error:', err)
   }
