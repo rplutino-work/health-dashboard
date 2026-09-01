@@ -7,6 +7,7 @@ import { collectAllUsage } from '@/lib/usage'
 import { shouldCollectUsage, runDailyMaintenance } from '@/lib/maintenance'
 import { processCostAlerts, sendDailyDigest } from '@/lib/cost-alerts'
 import { snapshotBilling } from '@/lib/billing-history'
+import { refreshCharges } from '@/lib/provider-charges'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -91,6 +92,16 @@ async function handler(request: NextRequest) {
     console.error('Maintenance error:', err)
   }
 
+  // Recalcular los cargos ANTES del snapshot: si no, la foto del dia guarda el
+  // monto viejo. Tambien avanza los ciclos que vencieron — es lo que faltaba
+  // cuando el 01/09 el dashboard seguia mostrando el ciclo de agosto.
+  let charges = null
+  try {
+    charges = await refreshCharges()
+  } catch (err) {
+    console.error('Charge refresh error:', err)
+  }
+
   // Foto del estado de cada ciclo. Va junto con la captura de consumo para que
   // el snapshot refleje los mismos numeros que se acaban de medir.
   let billing = null
@@ -140,5 +151,6 @@ async function handler(request: NextRequest) {
     costAlerts,
     digest,
     billing,
+    charges,
   })
 }

@@ -91,8 +91,9 @@ export function CostPanel({ breakdown, supabase }: CostPanelProps) {
         <p className="leading-relaxed">
           Los montos marcados <strong className="text-zinc-700">sin badge son reales</strong>,
           tomados del panel de facturación de cada proveedor; los que dicen{' '}
-          <strong className="text-amber-700">estimado</strong> son declarados y no se pudieron
-          verificar por API. El{' '}
+          <strong className="text-sky-700">calculado</strong> se derivan del consumo medido con las
+          tarifas del proveedor; los que dicen <strong className="text-amber-700">sin dato</strong>{' '}
+          abrieron un ciclo nuevo y todavía nadie cargó el monto. El{' '}
           <strong className="text-zinc-700">reparto entre proyectos es derivado</strong>: se
           prorratea según el consumo medido.
           {capturedAt && (
@@ -122,7 +123,7 @@ export function CostPanel({ breakdown, supabase }: CostPanelProps) {
       {/* ── Un bloque por proveedor, cada uno con SU ciclo ────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {charges
-          .filter((c) => c.amountToDate > 0 || c.plan !== 'Free')
+          .filter((c) => c.amountToDate > 0 || c.plan !== 'Free' || c.source === 'stale')
           .map((c) => {
             const lines = Object.entries(c.breakdown ?? {})
               .map(([k, v]) => ({ key: k, ...v }))
@@ -140,11 +141,16 @@ export function CostPanel({ breakdown, supabase }: CostPanelProps) {
                         {c.plan}
                       </span>
                     )}
-                    {/* Un monto declarado no puede parecer uno leido de la
-                        facturacion: la diferencia cambia cuanto confiar en el total. */}
-                    {c.source !== 'panel' && (
+                    {/* Un monto calculado no puede parecer uno leido de la
+                        facturacion, y uno que falta no puede parecer un cero. */}
+                    {c.source === 'derived' && (
+                      <span className="ml-2 text-[9px] font-semibold text-sky-700 bg-sky-50 border border-sky-200 rounded px-1.5 py-0.5 uppercase tracking-wider">
+                        calculado
+                      </span>
+                    )}
+                    {c.source === 'stale' && (
                       <span className="ml-2 text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 uppercase tracking-wider">
-                        estimado
+                        sin dato
                       </span>
                     )}
                   </h3>
@@ -180,6 +186,13 @@ export function CostPanel({ breakdown, supabase }: CostPanelProps) {
                     </p>
                   </div>
                 </div>
+
+                {c.source === 'stale' && (
+                  <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mb-3 leading-relaxed">
+                    Este ciclo abrió y todavía no se cargó el monto. El anterior quedó guardado en
+                    el historial; el cero de arriba no es lo que va gastado.
+                  </p>
+                )}
 
                 {/* Desglose de la factura: donde esta el gasto de verdad. */}
                 {lines.length > 0 && (
