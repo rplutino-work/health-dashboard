@@ -128,6 +128,51 @@ async function neonCurrentUsage(
 }
 
 /**
+ * Ritmo de consumo de Neon en CU-h por día, medido sobre los últimos 7 días.
+ *
+ * Extrapolar el total del ciclo dividido por la fracción transcurrida no sirve
+ * al principio del período: el 01/09, con 0.75 de 30 días corridos, daba una
+ * proyección de US$178 sobre un consumo real de US$4. Con deltas el número no
+ * depende de dónde esté parado el ciclo.
+ *
+ * Los saltos negativos son el reseteo del contador y se descartan en vez de
+ * restarse.
+ */
+async function neonDailyRate(): Promise<number | null> {
+  const from = new Date(Date.now() - 7 * 86400000).toISOString()
+  const { data } = await supabase
+    .from('provider_usage')
+    .select('project_slug, value, captured_at')
+    .eq('provider', 'neon')
+    .eq('metric', 'cu_hours')
+    .gte('captured_at', from)
+    .order('captured_at', { ascending: true })
+    .limit(4000)
+
+  if (!data || data.length < 2) return null
+
+  const series = new Map<string, Array<{ t: number; v: number }>>()
+  for (const r of data) {
+    const key = r.project_slug ?? '(sin asignar)'
+    if (!series.has(key)) series.set(key, [])
+    series.get(key)!.push({ t: Date.parse(r.captured_at as string), v: Number(r.value) })
+  }
+
+  let total = 0
+  for (const points of series.values()) {
+    for (let i = 1; i < points.length; i++) {
+      const d = points[i].v - points[i - 1].v
+      if (d > 0) total += d // un salto negativo es el reseteo, no consumo negativo
+    }
+  }
+
+  const first = Date.parse(data[0].captured_at as string)
+  const last = Date.parse(data[data.length - 1].captured_at as string)
+  const days = (last - first) / 86400000
+  return days >= 1 ? total / days : null
+}
+
+/**
  * Recalcula lo que se puede y avanza lo que venció.
  *
  * Neon se deriva del consumo medido. Los demás proveedores no exponen su
@@ -160,12 +205,17 @@ export async function refreshCharges(): Promise<ChargeRefresh[]> {
       const usage = compute + storage
       const amount = Math.max(usage, NEON_PLAN_FLOOR)
 
-      // Proyección: el consumo de Neon es tiempo encendido, así que crece
-      // parejo. Extrapolar el ritmo del ciclo hasta el cierre es razonable.
+      // Proyección: lo ya consumido más lo que falta del ciclo al ritmo medido
+      // de los últimos 7 días. Si todavía no hay serie suficiente se proyecta el
+      // piso del plan, que es lo mínimo que se va a pagar igual.
       const start = Date.parse(rolled.start)
       const end = Date.parse(rolled.end)
-      const pct = Math.min(Math.max((now - start) / (end - start), 0.001), 1)
-      const projected = Math.max(usage / pct, NEON_PLAN_FLOOR)
+      const rate = await neonDailyRate()
+      const daysLeft = Math.max((end - now) / 86400000, 0)
+      const projected =
+        rate === null
+          ? Math.max(usage, NEON_PLAN_FLOOR)
+          : Math.max(usage + rate * daysLeft * NEON_RATE_CU_HOUR, NEON_PLAN_FLOOR)
 
       await supabase.from('provider_charges').upsert(
         {
