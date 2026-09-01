@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { projects } from '@/config/projects'
 import { RESOURCES } from '@/config/resources'
+import { refList } from '@/lib/types'
 import type { Provider } from '@/lib/types'
 
 /**
@@ -182,22 +183,23 @@ export async function getCostBreakdown(): Promise<CostBreakdown> {
     // fuera a proposito: es herramienta de trabajo, no infraestructura de un sitio.
     const ATTRIBUTABLE = ['vercel', 'railway', 'neon', 'supabase'] as const
     for (const provider of ATTRIBUTABLE) {
-      const ref = res[provider]
-      if (!ref) continue
-      const key = `${provider}:${ref}`
-      const row = latest.get(key)
-      if (!row) continue
-      attributed.add(key)
-      list.push({
-        role: ROLE[provider],
-        provider,
-        ref,
-        value: row.value,
-        unit: row.unit,
-        share: shareOf(row),
-        cost: costOf(row),
-      })
-      if (provider === 'neon') sparkByProject.set(slug, (history.get(key) ?? []).slice().reverse())
+      for (const ref of refList(res[provider])) {
+        const key = `${provider}:${ref}`
+        const row = latest.get(key)
+        if (!row) continue
+        attributed.add(key)
+        list.push({
+          role: ROLE[provider],
+          provider,
+          ref,
+          value: row.value,
+          unit: row.unit,
+          share: shareOf(row),
+          cost: costOf(row),
+        })
+        if (provider === 'neon' && !sparkByProject.has(slug))
+          sparkByProject.set(slug, (history.get(key) ?? []).slice().reverse())
+      }
     }
     if (list.length) byProject.set(slug, list)
   }

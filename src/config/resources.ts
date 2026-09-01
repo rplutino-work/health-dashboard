@@ -31,7 +31,11 @@ export const RESOURCES: Record<string, ProjectResources> = {
     supabase: 'kucydhmobdcaihnpogqt/simuladorvr',
     vercel: 'simuladorvr',
   },
-  'argentum-web': { neon: 'purple-band-68109684', vercel: 'argentum-web' },
+  'argentum-web': {
+    // purple-band = produccion, cold-smoke = staging.
+    neon: ['purple-band-68109684', 'cold-smoke-62913512'],
+    vercel: 'argentum-web',
+  },
   'sitioweb-rodrigoplutino': {
     neon: 'cool-leaf-86776242',
     vercel: 'sitioweb-rodrigoplutino',

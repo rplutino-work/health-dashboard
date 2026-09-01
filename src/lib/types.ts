@@ -16,10 +16,21 @@ export interface CheckDefinition {
  * mudado de uno a otro — por eso son todos opcionales e independientes.
  */
 export interface ProjectResources {
-  neon?: string // project id de Neon
+  /**
+   * Project id de Neon. Acepta varios: argentum tiene produccion y staging como
+   * bases separadas, y hasta que esto fue lista la de staging aparecia bajo
+   * "consumo sin proyecto asignado" — que es justo donde no hay que buscarla,
+   * porque era la que mas consumia.
+   */
+  neon?: string | string[]
   supabase?: string // project ref de Supabase
   railway?: string // service id de Railway
   vercel?: string // project id o nombre en Vercel
+}
+
+/** Normaliza un campo que puede venir suelto o como lista. */
+export function refList(v: string | string[] | undefined): string[] {
+  return v === undefined ? [] : Array.isArray(v) ? v : [v]
 }
 
 export interface ProjectConfig {

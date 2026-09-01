@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { projects } from '@/config/projects'
 import { RESOURCES, SUPABASE_SCHEMA_OWNER } from '@/config/resources'
+import { refList } from '@/lib/types'
 import { collectNeon, NEON_CUMULATIVE } from '@/lib/providers/neon'
 import { collectSupabase } from '@/lib/providers/supabase-usage'
 import { collectRailway } from '@/lib/providers/railway'
@@ -37,7 +38,7 @@ function buildMaps() {
   const railway = new Map<string, string>()
   const vercel = new Map<string, string>()
   for (const [slug, r] of Object.entries(RESOURCES)) {
-    if (r.neon) neon.set(r.neon, slug)
+    for (const ref of refList(r.neon)) neon.set(ref, slug)
     if (r.railway) railway.set(r.railway, slug)
     if (r.vercel) vercel.set(r.vercel, slug)
   }
