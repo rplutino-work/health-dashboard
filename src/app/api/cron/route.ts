@@ -27,6 +27,36 @@ async function handler(request: NextRequest) {
   }
 
   const startedAt = new Date().toISOString()
+  const params = request.nextUrl.searchParams
+
+  // Algo dispara este cron dos veces por ventana: el 31/08 hubo 96 corridas
+  // contra las 48 que agenda vercel.json, en pares (una exacta a la hora y otra
+  // 18 s a 3 min despues), las dos completando bien. No hay workflows de GitHub
+  // en el repo ni nadie mas que lo llame, asi que el duplicado sale de Vercel y
+  // no se puede ver sin token de cuenta.
+  //
+  // Mientras tanto se corta el efecto, que es lo que cuesta: cada corrida son 23
+  // pedidos HTTP contra sitios propios en Vercel, y cada pedido es una
+  // invocacion mas sus eventos de observability. Si ya hubo una corrida hace
+  // menos de 20 min (la agenda es de 30), esta es la repetida y se saltea.
+  if (params.get('force') === null && params.get('digest') === null) {
+    const { data: recent } = await supabase
+      .from('health_runs')
+      .select('started_at')
+      .gte('started_at', new Date(Date.now() - 20 * 60 * 1000).toISOString())
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (recent) {
+      const agoMin = (Date.now() - Date.parse(recent.started_at)) / 60000
+      return NextResponse.json({
+        success: true,
+        skipped: 'corrida duplicada',
+        lastRunMinutesAgo: Number(agoMin.toFixed(1)),
+      })
+    }
+  }
 
   // Create run record
   const { data: run } = await supabase
@@ -74,7 +104,7 @@ async function handler(request: NextRequest) {
   // Con su propio intervalo, para no guardar la misma cifra 48 veces al dia.
   // ?force=usage salta el intervalo, para refrescar a mano tras un cambio grande
   // (una migracion, una purga) sin esperar a la proxima ventana.
-  const force = new URL(request.url).searchParams.get('force') === 'usage'
+  const force = params.get('force') === 'usage'
   let usage: Awaited<ReturnType<typeof collectAllUsage>> | null = null
   try {
     if (force || (await shouldCollectUsage())) {
@@ -134,7 +164,7 @@ async function handler(request: NextRequest) {
       })
     )
     // ?digest=force reenvia el resumen aunque ya se haya mandado hoy.
-    const forced = request.nextUrl.searchParams.get('digest') === 'force'
+    const forced = params.get('digest') === 'force'
     if (forced || hourArg >= 9) digest = await sendDailyDigest(forced)
   } catch (err) {
     console.error('Digest error:', err)
