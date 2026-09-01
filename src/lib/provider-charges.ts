@@ -61,27 +61,70 @@ function advanceCycle(start: string, end: string, now: number): { start: string;
   return { start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) }
 }
 
-/** Consumo del ciclo en curso de Neon, según la última captura que tenemos. */
-async function neonCurrentUsage(): Promise<{ cuHours: number; gb: number; at: string } | null> {
+/**
+ * Consumo del ciclo en curso de Neon.
+ *
+ * Neon resetea el contador de cada proyecto por separado, no todo junto, y a un
+ * proyecto suspendido no se lo resetea hasta que vuelve a despertar: la API
+ * sigue devolviendo el valor del ciclo anterior, congelado. El 01/09 eso hacía
+ * que plasdeko, argentum y frutos-secos (los tres ya migrados fuera de Neon)
+ * aportaran 179 CU-h de agosto a la cuenta de septiembre.
+ *
+ * La regla que distingue los dos casos: si el valor de ahora es MENOR que el de
+ * antes del corte, el contador reseteó y lo de ahora es del ciclo nuevo. Si no
+ * bajó, el proyecto está dormido y todavía muestra lo viejo — su consumo del
+ * ciclo nuevo es lo que haya subido desde el corte, que para un idle es cero.
+ */
+async function neonCurrentUsage(
+  cycleStart: string
+): Promise<{ cuHours: number; gb: number; at: string; stale: string[] } | null> {
   const { data } = await supabase
     .from('provider_usage')
-    .select('metric, value, captured_at')
+    .select('project_slug, metric, value, captured_at')
     .eq('provider', 'neon')
     .in('metric', ['cu_hours', 'storage_bytes'])
+    .gte('captured_at', new Date(Date.parse(cycleStart) - 3 * 86400000).toISOString())
     .order('captured_at', { ascending: false })
-    .limit(600)
+    .limit(4000)
 
   if (!data || data.length === 0) return null
   const at = data[0].captured_at as string
+  const boundary = Date.parse(cycleStart)
+
+  // Último valor de cada proyecto, y el último ANTES de que abriera el ciclo.
+  const now = new Map<string, number>()
+  const before = new Map<string, number>()
+  let bytes = 0
+
+  for (const r of data) {
+    const key = r.project_slug ?? '(sin asignar)'
+    if (r.metric === 'storage_bytes') {
+      if (r.captured_at === at) bytes += Number(r.value)
+      continue
+    }
+    const t = Date.parse(r.captured_at as string)
+    const v = Number(r.value)
+    if (t >= boundary) {
+      if (!now.has(key)) now.set(key, v)
+    } else if (!before.has(key)) {
+      before.set(key, v)
+    }
+  }
 
   let cuHours = 0
-  let bytes = 0
-  for (const r of data) {
-    if (r.captured_at !== at) continue
-    if (r.metric === 'cu_hours') cuHours += Number(r.value)
-    else bytes += Number(r.value)
+  const stale: string[] = []
+  for (const [key, v] of now) {
+    const prev = before.get(key)
+    if (prev === undefined || v < prev) {
+      cuHours += v // resetéo: lo de ahora ya es del ciclo nuevo
+    } else {
+      const grew = v - prev
+      cuHours += grew // dormido: solo cuenta lo que efectivamente subió
+      if (grew < 0.05) stale.push(key)
+    }
   }
-  return { cuHours, gb: bytes / 1e9, at }
+
+  return { cuHours, gb: bytes / 1e9, at, stale }
 }
 
 /**
@@ -106,7 +149,7 @@ export async function refreshCharges(): Promise<ChargeRefresh[]> {
     const cycle = `${rolled.start}->${rolled.end}`
 
     if (provider === 'neon') {
-      const u = await neonCurrentUsage()
+      const u = await neonCurrentUsage(rolled.start)
       if (!u) {
         out.push({ provider, action: 'sin-cambios', amount: null, cycle, note: 'sin consumo medido' })
         continue
@@ -150,7 +193,9 @@ export async function refreshCharges(): Promise<ChargeRefresh[]> {
         action: didRoll ? 'ciclo-avanzado' : 'recalculado',
         amount: Number(amount.toFixed(2)),
         cycle,
-        note: `${u.cuHours.toFixed(1)} CU-h medidas`,
+        note:
+          `${u.cuHours.toFixed(1)} CU-h medidas` +
+          (u.stale.length ? ` · ${u.stale.length} proyecto(s) dormido(s) sin resetear` : ''),
       })
       continue
     }
