@@ -162,18 +162,35 @@ async function neonDailyRate(): Promise<number | null> {
     series.get(key)!.push({ t: Date.parse(r.captured_at as string), v: Number(r.value) })
   }
 
-  let total = 0
+  // Cada base se mide SOLO desde su ultimo reseteo. Neon resetea a cada una en
+  // su momento, asi que justo despues del corte una base puede seguir sumando
+  // sobre el contador viejo: contar ese tramo mete consumo del ciclo anterior en
+  // el ritmo del nuevo. El 02/09 eso le atribuia a argentum 18 CU-h/dia y
+  // proyectaba US$53 cuando lo real eran US$7.
+  let rate = 0
+  let measured = false
+
   for (const points of series.values()) {
+    let from = 0
     for (let i = 1; i < points.length; i++) {
-      const d = points[i].v - points[i - 1].v
-      if (d > 0) total += d // un salto negativo es el reseteo, no consumo negativo
+      if (points[i].v < points[i - 1].v) from = i // reseteo: la serie empieza aca
     }
+    const win = points.slice(from)
+    if (win.length < 2) continue
+
+    const days = (win[win.length - 1].t - win[0].t) / 86400000
+    if (days < 0.5) continue // muy poca ventana: su ritmo todavia no dice nada
+
+    let grew = 0
+    for (let i = 1; i < win.length; i++) {
+      const d = win[i].v - win[i - 1].v
+      if (d > 0) grew += d
+    }
+    rate += grew / days
+    measured = true
   }
 
-  const first = Date.parse(data[0].captured_at as string)
-  const last = Date.parse(data[data.length - 1].captured_at as string)
-  const days = (last - first) / 86400000
-  return days >= 1 ? total / days : null
+  return measured ? rate : null
 }
 
 /**
