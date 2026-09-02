@@ -80,7 +80,7 @@ async function neonCurrentUsage(
 ): Promise<{ cuHours: number; gb: number; at: string; stale: string[] } | null> {
   const { data } = await supabase
     .from('provider_usage')
-    .select('project_slug, metric, value, captured_at')
+    .select('resource_ref, metric, value, captured_at')
     .eq('provider', 'neon')
     .in('metric', ['cu_hours', 'storage_bytes'])
     .gte('captured_at', new Date(Date.parse(cycleStart) - 3 * 86400000).toISOString())
@@ -97,7 +97,11 @@ async function neonCurrentUsage(
   let bytes = 0
 
   for (const r of data) {
-    const key = r.project_slug ?? '(sin asignar)'
+    // Se agrupa por resource_ref (la base) y no por project_slug: el contador
+    // lo resetea Neon por base, y desde que un proyecto puede tener varias
+    // (argentum = produccion + staging) agrupar por slug mezclaba dos series
+    // distintas en una sola.
+    const key = r.resource_ref as string
     if (r.metric === 'storage_bytes') {
       if (r.captured_at === at) bytes += Number(r.value)
       continue
@@ -142,7 +146,7 @@ async function neonDailyRate(): Promise<number | null> {
   const from = new Date(Date.now() - 7 * 86400000).toISOString()
   const { data } = await supabase
     .from('provider_usage')
-    .select('project_slug, value, captured_at')
+    .select('resource_ref, value, captured_at')
     .eq('provider', 'neon')
     .eq('metric', 'cu_hours')
     .gte('captured_at', from)
@@ -153,7 +157,7 @@ async function neonDailyRate(): Promise<number | null> {
 
   const series = new Map<string, Array<{ t: number; v: number }>>()
   for (const r of data) {
-    const key = r.project_slug ?? '(sin asignar)'
+    const key = r.resource_ref as string // por base, no por proyecto
     if (!series.has(key)) series.set(key, [])
     series.get(key)!.push({ t: Date.parse(r.captured_at as string), v: Number(r.value) })
   }
