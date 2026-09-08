@@ -169,22 +169,6 @@ export const projects: ProjectConfig[] = [
   },
 
   // ── Known broken (ERROR en Vercel) ───────────────────────────
-  {
-    slug: 'storefront',
-    name: 'Storefront',
-    url: 'https://storefront-rodrigos-projects-8b995206.vercel.app',
-    checks: [
-      { name: 'front', type: 'frontend', path: '/' },
-    ],
-  },
-  {
-    slug: 'dashboard-medusa',
-    name: 'Dashboard Medusa',
-    url: 'https://dashboard-rodrigos-projects-8b995206.vercel.app',
-    checks: [
-      { name: 'front', type: 'frontend', path: '/' },
-    ],
-  },
 ]
 
 export const alertConfig = {
