@@ -32,8 +32,12 @@ export const RESOURCES: Record<string, ProjectResources> = {
     vercel: 'simuladorvr',
   },
   'argentum-web': {
-    // purple-band = produccion, cold-smoke = staging.
-    neon: ['purple-band-68109684', 'cold-smoke-62913512'],
+    // Produccion de argentum NO usa Neon: corre entera en Railway (Postgres +
+    // Redis, servicio argentum-api). Lo unico que queda en Neon es la base de
+    // staging. El proyecto Neon 'argentum' (purple-band) se dio de baja el
+    // 08/09/2026 tras 12 dias sin uso — backup verificado en
+    // ~/backups/neon-argentum/.
+    neon: 'cold-smoke-62913512',
     vercel: 'argentum-web',
   },
   'sitioweb-rodrigoplutino': {

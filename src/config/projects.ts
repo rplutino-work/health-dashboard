@@ -86,6 +86,19 @@ export const projects: ProjectConfig[] = [
     ],
   },
   {
+    // El frontend en Vercel puede devolver 200 con el backend caido: es una
+    // pantalla que consulta a otro lado. El 05/09 Railway redesplego solo el
+    // Redis de produccion y el monitoreo no lo habria visto. /health devuelve
+    // {"status":"ok","env":"production"}, que es exactamente lo que hay que
+    // vigilar.
+    slug: 'argentum-api',
+    name: 'Argentum API',
+    url: 'https://argentum-api-production.up.railway.app',
+    checks: [
+      { name: 'api', type: 'api', path: '/health' },
+    ],
+  },
+  {
     slug: 'sitioweb-rodrigoplutino',
     name: 'Portfolio Rodrigo',
     url: 'https://rodrigoplutino.com.ar',
