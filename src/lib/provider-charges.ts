@@ -37,7 +37,7 @@ const NEON_PLAN_FLOOR = 19
 
 export interface ChargeRefresh {
   provider: Provider
-  action: 'recalculado' | 'ciclo-avanzado' | 'sin-cambios' | 'marcado-viejo'
+  action: 'recalculado' | 'ciclo-avanzado' | 'sin-cambios' | 'arrastrado'
   amount: number | null
   cycle: string
   note?: string
