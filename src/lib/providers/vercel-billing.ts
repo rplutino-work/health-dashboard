@@ -37,7 +37,13 @@ export async function collectVercelCharge(
   cycleStart: string,
   cycleEnd: string
 ): Promise<VercelCharge | null> {
-  const url = `${API}/v1/billing/charges?teamId=${teamId}&from=${cycleStart}&to=${cycleEnd}`
+  // El `to` se corta en hoy, nunca en el fin del ciclo. Pidiendo una fecha
+  // futura la API devuelve mas del doble de cargos (53.847 contra 22.412) y
+  // montos que no coinciden con `vercel usage` — trae cosas que todavia no
+  // pasaron. Lo que se quiere es lo gastado hasta ahora.
+  const hoy = new Date().toISOString().slice(0, 10)
+  const hasta = hoy < cycleEnd ? hoy : cycleEnd
+  const url = `${API}/v1/billing/charges?teamId=${teamId}&from=${cycleStart}&to=${hasta}`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
   if (!res.ok) throw new Error(`vercel billing: HTTP ${res.status}`)
 
@@ -77,7 +83,7 @@ export async function collectVercelCharge(
 
   const start = Date.parse(cycleStart)
   const end = Date.parse(cycleEnd)
-  const pct = Math.min(Math.max((Date.now() - start) / (end - start), 0.001), 1)
+  const pct = Math.min(Math.max((Date.parse(hasta) - start) / (end - start), 0.001), 1)
   const effectiveProjected = effective / pct
 
   // Mientras no se facture nada, proyectar el bruto menos lo incluido; una vez
