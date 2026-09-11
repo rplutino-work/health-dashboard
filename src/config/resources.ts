@@ -51,6 +51,17 @@ export const RESOURCES: Record<string, ProjectResources> = {
     vercel: 'frutos-secos-dg',
   },
   'ecommerce-kit': { neon: 'muddy-silence-59839518', vercel: 'ecommerce-kit' },
+  // Tiendas montadas sobre ecommerce-kit: cada una tiene su propio proyecto en
+  // Vercel, y Canning ademas su propia base. Sin esto aparecian bajo "consumo
+  // sin proyecto asignado", que es justo donde nadie los busca.
+  'canning-home-decor': {
+    neon: 'raspy-glitter-58147629',
+    vercel: 'canning-home-decor',
+    railway: '859bb1ca-d094-4fcf-a7ea-32c9520079d7',
+  },
+  'plasdeko-store': { vercel: 'plasdeko-store' },
+  'fsdg-store': { vercel: 'fsdg-store' },
+  'compactfit-admin': { vercel: 'compactfit-admin' },
   'powerseries-club': { neon: 'jolly-union-61600763', vercel: 'powerseries-club' },
   // Base de musica: 213k canciones, 125k tags, 7k resenas. Aparecia como
   // "consumo sin asignar" hasta que se rastreo que pleyade la usa.

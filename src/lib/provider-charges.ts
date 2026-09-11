@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { Provider } from '@/lib/types'
+import { collectVercelCharge } from '@/lib/providers/vercel-billing'
 
 /**
  * Mantiene al día la tabla de cargos.
@@ -271,24 +272,71 @@ export async function refreshCharges(): Promise<ChargeRefresh[]> {
       continue
     }
 
+    // Vercel tambien se puede derivar: su API de cargos da lo facturado real.
+    if (provider === 'vercel' && process.env.VERCEL_API_TOKEN && process.env.VERCEL_TEAM_ID) {
+      try {
+        const v = await collectVercelCharge(
+          process.env.VERCEL_API_TOKEN,
+          process.env.VERCEL_TEAM_ID,
+          rolled.start,
+          rolled.end
+        )
+        if (v) {
+          await supabase.from('provider_charges').upsert(
+            {
+              provider,
+              plan: 'Pro',
+              cycle_start: rolled.start,
+              cycle_end: rolled.end,
+              amount_to_date: v.amountToDate,
+              amount_projected: v.amountProjected,
+              breakdown: v.breakdown,
+              source: 'derived',
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'provider' }
+          )
+          out.push({
+            provider,
+            action: didRoll ? 'ciclo-avanzado' : 'recalculado',
+            amount: v.amountToDate,
+            cycle,
+            note: `US$${v.effectiveToDate.toFixed(2)} de consumo, US$${v.amountToDate.toFixed(2)} facturados`,
+          })
+          continue
+        }
+      } catch (err) {
+        console.error('Vercel billing error:', err)
+        // se sigue al camino de abajo, que conserva el monto anterior
+      }
+    }
+
     if (!didRoll) {
       out.push({ provider, action: 'sin-cambios', amount: Number(r.amount_to_date), cycle })
       continue
     }
 
-    // Ciclo vencido y sin forma de recalcularlo: se abre el nuevo en cero y se
-    // marca 'stale'. El monto viejo ya quedó guardado en billing_history como
-    // definitivo, así que no se pierde: deja de hacerse pasar por el actual.
+    // Ciclo vencido y sin forma de recalcularlo.
+    //
+    // Antes esto abria el ciclo nuevo en CERO. Estaba mal: un cero se lee como
+    // "no cuesta nada" y el panel llego a mostrar US$0 de infraestructura total
+    // el dia que rotaron tres ciclos juntos. Para servicios que se pagan todos
+    // los meses —una suscripcion, un backend prendido— el mejor dato disponible
+    // no es cero, es lo que salio el mes pasado.
+    //
+    // Asi que se arrastra el monto anterior y se marca 'carried' para que el
+    // panel diga que es del ciclo pasado y no una lectura fresca.
+    const previo = Number(r.amount_to_date)
     await supabase.from('provider_charges').upsert(
       {
         provider,
         plan: r.plan,
         cycle_start: rolled.start,
         cycle_end: rolled.end,
-        amount_to_date: 0,
-        amount_projected: null,
-        breakdown: null,
-        source: 'stale',
+        amount_to_date: previo,
+        amount_projected: previo,
+        breakdown: r.breakdown,
+        source: 'carried',
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'provider' }
@@ -296,10 +344,10 @@ export async function refreshCharges(): Promise<ChargeRefresh[]> {
 
     out.push({
       provider,
-      action: 'marcado-viejo',
-      amount: 0,
+      action: 'arrastrado',
+      amount: previo,
       cycle,
-      note: `cerró en US$${Number(r.amount_to_date).toFixed(2)}, falta cargar el nuevo`,
+      note: `se arrastra US$${previo.toFixed(2)} del ciclo anterior hasta tener dato nuevo`,
     })
   }
 

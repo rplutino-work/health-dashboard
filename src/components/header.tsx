@@ -8,11 +8,24 @@ interface HeaderProps {
   lastRun: string | null
   /** Costo mensual de toda la infraestructura, si hay tarifas configuradas. */
   monthlyTotal?: number | null
+  /**
+   * No se pudo leer el estado. Distinto de "todo bien": sin este flag, una
+   * consulta fallida se renderizaba como cero caidos y cartel verde.
+   */
+  stale?: boolean
 }
 
-export function Header({ total, up, degraded, down, lastRun, monthlyTotal = null }: HeaderProps) {
+export function Header({
+  total,
+  up,
+  degraded,
+  down,
+  lastRun,
+  monthlyTotal = null,
+  stale = false,
+}: HeaderProps) {
   const timeAgo = lastRun ? getTimeAgo(new Date(lastRun)) : 'nunca'
-  const allGood = down === 0 && degraded === 0
+  const allGood = !stale && down === 0 && degraded === 0
 
   return (
     <div className="mb-6">
@@ -20,10 +33,13 @@ export function Header({ total, up, degraded, down, lastRun, monthlyTotal = null
         <div className="flex items-center gap-3">
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-              allGood ? 'bg-emerald-50' : 'bg-red-50'
+              stale ? 'bg-amber-50' : allGood ? 'bg-emerald-50' : 'bg-red-50'
             }`}
           >
-            <Activity size={18} className={allGood ? 'text-emerald-600' : 'text-red-600'} />
+            <Activity
+              size={18}
+              className={stale ? 'text-amber-600' : allGood ? 'text-emerald-600' : 'text-red-600'}
+            />
           </div>
           <div>
             <h1 className="text-lg font-bold text-zinc-900 tracking-tight">Health Dashboard</h1>
@@ -48,21 +64,42 @@ export function Header({ total, up, degraded, down, lastRun, monthlyTotal = null
           )}
           <div
             className={`px-4 py-2 rounded-lg border text-xs font-bold tracking-wide ${
-              allGood
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                : 'bg-red-50 border-red-200 text-red-700'
+              stale
+                ? 'bg-amber-50 border-amber-300 text-amber-800'
+                : allGood
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : 'bg-red-50 border-red-200 text-red-700'
             }`}
           >
-            {allGood ? 'TODO OK' : `${down + degraded} PROBLEMA${down + degraded > 1 ? 'S' : ''}`}
+            {stale
+              ? 'SIN DATOS'
+              : allGood
+                ? 'TODO OK'
+                : `${down + degraded} PROBLEMA${down + degraded > 1 ? 'S' : ''}`}
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <Stat label="Proyectos" value={total} icon={<Activity size={12} />} accent="text-zinc-500" />
-        <Stat label="Sanos" value={up} icon={<CheckCircle2 size={12} />} accent="text-emerald-600" />
-        <Stat label="Lentos" value={degraded} icon={<AlertTriangle size={12} />} accent="text-amber-600" />
-        <Stat label="Caídos" value={down} icon={<XCircle size={12} />} accent="text-red-600" />
+        <Stat
+          label="Sanos"
+          value={stale ? '—' : up}
+          icon={<CheckCircle2 size={12} />}
+          accent="text-emerald-600"
+        />
+        <Stat
+          label="Lentos"
+          value={stale ? '—' : degraded}
+          icon={<AlertTriangle size={12} />}
+          accent="text-amber-600"
+        />
+        <Stat
+          label="Caídos"
+          value={stale ? '—' : down}
+          icon={<XCircle size={12} />}
+          accent="text-red-600"
+        />
       </div>
     </div>
   )
@@ -75,7 +112,7 @@ function Stat({
   accent,
 }: {
   label: string
-  value: number
+  value: number | string
   icon: React.ReactNode
   accent: string
 }) {

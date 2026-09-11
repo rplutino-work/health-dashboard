@@ -21,21 +21,40 @@ interface HealthCheck {
   checked_at: string
 }
 
+/**
+ * Lee el estado de los chequeos.
+ *
+ * Devuelve `failed` cuando la consulta no se pudo hacer. Antes el error se
+ * tragaba y la lista quedaba vacia, y una lista vacia se renderiza igual que
+ * "cero caidos": el panel mostraba 21 proyectos, cero sanos, cero caidos y un
+ * cartel verde de TODO OK. Para un monitoreo esa es la peor falla posible —
+ * decir que esta todo bien cuando en realidad no sabe nada.
+ */
 async function getData() {
-  const { data: checks } = await supabase
-    .from('health_checks')
-    .select('*')
-    .order('checked_at', { ascending: false })
-    .limit(300)
+  const [checksRes, runRes] = await Promise.all([
+    supabase
+      .from('health_checks')
+      .select('*')
+      .order('checked_at', { ascending: false })
+      .limit(300),
+    supabase
+      .from('health_runs')
+      .select('*')
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
 
-  const { data: lastRun } = await supabase
-    .from('health_runs')
-    .select('*')
-    .order('started_at', { ascending: false })
-    .limit(1)
-    .single()
+  if (checksRes.error) {
+    console.error('health_checks:', checksRes.error.message)
+    return { checks: [], lastRun: null, failed: true as const }
+  }
 
-  return { checks: (checks as HealthCheck[]) || [], lastRun }
+  return {
+    checks: (checksRes.data as HealthCheck[]) || [],
+    lastRun: runRes.data,
+    failed: false as const,
+  }
 }
 
 /**
@@ -64,7 +83,7 @@ async function getSupabaseLimits() {
 }
 
 export default async function DashboardPage() {
-  const [{ checks, lastRun }, breakdown, supabaseLimits, fx, closedCycles, cycleProgress, invoices] =
+  const [{ checks, lastRun, failed }, breakdown, supabaseLimits, fx, closedCycles, cycleProgress, invoices] =
     await Promise.all([
       getData(),
       getCostBreakdown(),
@@ -140,6 +159,7 @@ export default async function DashboardPage() {
         down={down}
         lastRun={lastRun?.finished_at || lastRun?.started_at || null}
         monthlyTotal={breakdown.totalToDate}
+        stale={failed}
       />
 
       <CostPanel breakdown={breakdown} supabase={supabaseLimits} />
