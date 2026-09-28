@@ -79,73 +79,52 @@ function advanceCycle(start: string, end: string, now: number): { start: string;
 async function neonCurrentUsage(
   cycleStart: string
 ): Promise<{ cuHours: number; gb: number; at: string; stale: string[] } | null> {
-  // Se piden solo las dos fotos que hacen falta —la ultima del ciclo y la
-  // ultima anterior al corte— en vez de traer toda la ventana y filtrarla en
-  // memoria.
+  // Se suman los contadores tal como los devuelve Neon, sin restarle nada.
   //
-  // Traerla entera no servia: PostgREST corta en 1000 filas aunque se pida un
-  // limite mayor, y con el orden descendente se perdian justo las muestras
-  // previas al corte. Sin referencia previa, una base dormida cuenta su
-  // contador entero en lugar de cero: el 11/09 sumaba 179 CU-h de agosto
-  // (plasdeko 91 + frutos-secos 33.9 + el argentum viejo 54.3) e inflaba el
-  // cargo de US$21.85 a US$41.18.
-  const snapshot = async (op: 'gte' | 'lt') => {
-    const q = supabase
-      .from('provider_usage')
-      .select('captured_at')
-      .eq('provider', 'neon')
-      .eq('metric', 'cu_hours')
-      .order('captured_at', { ascending: false })
-      .limit(1)
-    const { data } = await (op === 'gte'
-      ? q.gte('captured_at', cycleStart)
-      : q.lt('captured_at', cycleStart))
-    const at = data?.[0]?.captured_at as string | undefined
-    if (!at) return { at: null, rows: [] as Array<{ resource_ref: string; value: number }> }
+  // Antes esto intentaba detectar reseteos y descontar lo que parecia del ciclo
+  // anterior. Contrastado contra la facturacion real del 28/09 —Neon cobraba
+  // 560.8 CU-h— los tres metodos dieron:
+  //
+  //   restando la foto previa al corte   367.7   -34%
+  //   sumando deltas entre capturas      475.0   -15%
+  //   sumando los contadores tal cual    595.0    +6%
+  //
+  // El +6% es la deriva entre la foto del panel y la lectura de ahora, a unas
+  // 21 CU-h/dia. Los otros dos descontaban consumo que Neon si factura: el
+  // contador ya viene acotado al ciclo, asi que corregirlo sobraba.
+  const { data: ultima } = await supabase
+    .from('provider_usage')
+    .select('captured_at')
+    .eq('provider', 'neon')
+    .eq('metric', 'cu_hours')
+    .gte('captured_at', cycleStart)
+    .order('captured_at', { ascending: false })
+    .limit(1)
 
-    const { data: rows } = await supabase
+  const at = ultima?.[0]?.captured_at as string | undefined
+  if (!at) return null
+
+  const [{ data: cu }, { data: st }] = await Promise.all([
+    supabase
       .from('provider_usage')
       .select('resource_ref, value')
       .eq('provider', 'neon')
       .eq('metric', 'cu_hours')
-      .eq('captured_at', at)
-    return {
-      at,
-      rows: (rows ?? []).map((r) => ({ resource_ref: r.resource_ref as string, value: Number(r.value) })),
-    }
-  }
+      .eq('captured_at', at),
+    supabase
+      .from('provider_usage')
+      .select('value')
+      .eq('provider', 'neon')
+      .eq('metric', 'storage_bytes')
+      .eq('captured_at', at),
+  ])
 
-  const [actual, previo] = await Promise.all([snapshot('gte'), snapshot('lt')])
-  if (!actual.at) return null
-
-  const before = new Map(previo.rows.map((r) => [r.resource_ref, r.value]))
-
-  let cuHours = 0
-  const stale: string[] = []
-  for (const r of actual.rows) {
-    const prev = before.get(r.resource_ref)
-    // Si el valor bajo, el contador reseteo y lo de ahora ya es del ciclo nuevo.
-    // Si no bajo, la base esta dormida y solo cuenta lo que efectivamente subio.
-    if (prev === undefined || r.value < prev) {
-      cuHours += r.value
-    } else {
-      const grew = r.value - prev
-      cuHours += grew
-      if (grew < 0.05) stale.push(r.resource_ref)
-    }
-  }
-
-  // El storage es instantaneo: alcanza con la ultima captura.
-  const { data: st } = await supabase
-    .from('provider_usage')
-    .select('value')
-    .eq('provider', 'neon')
-    .eq('metric', 'storage_bytes')
-    .eq('captured_at', actual.at)
+  const cuHours = (cu ?? []).reduce((a, b) => a + Number(b.value), 0)
   const bytes = (st ?? []).reduce((a, b) => a + Number(b.value), 0)
 
-  return { cuHours, gb: bytes / 1e9, at: actual.at, stale }
+  return { cuHours, gb: bytes / 1e9, at, stale: [] }
 }
+
 
 
 /**
