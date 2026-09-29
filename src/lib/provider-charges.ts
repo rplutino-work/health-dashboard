@@ -79,51 +79,57 @@ function advanceCycle(start: string, end: string, now: number): { start: string;
 async function neonCurrentUsage(
   cycleStart: string
 ): Promise<{ cuHours: number; gb: number; at: string; stale: string[] } | null> {
-  // Se suman los contadores tal como los devuelve Neon, sin restarle nada.
+  // Se usa la captura del ciclo con MAYOR total, no la ultima.
   //
-  // Antes esto intentaba detectar reseteos y descontar lo que parecia del ciclo
-  // anterior. Contrastado contra la facturacion real del 28/09 —Neon cobraba
-  // 560.8 CU-h— los tres metodos dieron:
+  // Los contadores de Neon son acumulados: dentro de un ciclo solo pueden
+  // subir. Pero la API a veces devuelve menos de lo que ya habia informado —
+  // el 24/09 dejo de reportar plasdeko y el total cayo 91 de golpe; el 29/09
+  // devolvio CERO en todos los proyectos con el ciclo todavia abierto
+  // (quota_reset_at seguia en el 01/10). Tomando la ultima captura sin mas, ese
+  // dia el cargo se desplomo a los US$19 del piso del plan con el mes real en
+  // ~US$60.
   //
-  //   restando la foto previa al corte   367.7   -34%
-  //   sumando deltas entre capturas      475.0   -15%
-  //   sumando los contadores tal cual    595.0    +6%
-  //
-  // El +6% es la deriva entre la foto del panel y la lectura de ahora, a unas
-  // 21 CU-h/dia. Los otros dos descontaban consumo que Neon si factura: el
-  // contador ya viene acotado al ciclo, asi que corregirlo sobraba.
-  const { data: ultima } = await supabase
+  // Como el contador no puede bajar, la lectura mas alta del ciclo es la mejor
+  // que tenemos. Se toma la captura entera y no el maximo por base: el maximo
+  // por base arrastra valores de agosto de proyectos borrados o dormidos que
+  // nunca resetearon, y da 23% de mas.
+  const { data } = await supabase
     .from('provider_usage')
-    .select('captured_at')
+    .select('captured_at, value')
     .eq('provider', 'neon')
     .eq('metric', 'cu_hours')
     .gte('captured_at', cycleStart)
-    .order('captured_at', { ascending: false })
-    .limit(1)
+    .limit(1000)
 
-  const at = ultima?.[0]?.captured_at as string | undefined
+  if (!data || data.length === 0) return null
+
+  const porCaptura = new Map<string, number>()
+  for (const r of data) {
+    const k = r.captured_at as string
+    porCaptura.set(k, (porCaptura.get(k) ?? 0) + Number(r.value))
+  }
+
+  let at = ''
+  let cuHours = -1
+  for (const [k, v] of porCaptura) {
+    if (v > cuHours) {
+      cuHours = v
+      at = k
+    }
+  }
   if (!at) return null
 
-  const [{ data: cu }, { data: st }] = await Promise.all([
-    supabase
-      .from('provider_usage')
-      .select('resource_ref, value')
-      .eq('provider', 'neon')
-      .eq('metric', 'cu_hours')
-      .eq('captured_at', at),
-    supabase
-      .from('provider_usage')
-      .select('value')
-      .eq('provider', 'neon')
-      .eq('metric', 'storage_bytes')
-      .eq('captured_at', at),
-  ])
-
-  const cuHours = (cu ?? []).reduce((a, b) => a + Number(b.value), 0)
+  const { data: st } = await supabase
+    .from('provider_usage')
+    .select('value')
+    .eq('provider', 'neon')
+    .eq('metric', 'storage_bytes')
+    .eq('captured_at', at)
   const bytes = (st ?? []).reduce((a, b) => a + Number(b.value), 0)
 
   return { cuHours, gb: bytes / 1e9, at, stale: [] }
 }
+
 
 
 

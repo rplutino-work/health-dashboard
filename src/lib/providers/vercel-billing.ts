@@ -42,7 +42,15 @@ export async function collectVercelCharge(
   // montos que no coinciden con `vercel usage` — trae cosas que todavia no
   // pasaron. Lo que se quiere es lo gastado hasta ahora.
   const hoy = new Date().toISOString().slice(0, 10)
-  const hasta = hoy < cycleEnd ? hoy : cycleEnd
+  let hasta = hoy < cycleEnd ? hoy : cycleEnd
+  // El primer dia del ciclo `from` y `to` coinciden y la API rechaza el rango,
+  // el colector se caia y el cargo quedaba arrastrado del mes anterior. Se pide
+  // al menos un dia.
+  if (hasta <= cycleStart) {
+    const d = new Date(`${cycleStart}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + 1)
+    hasta = d.toISOString().slice(0, 10)
+  }
   const url = `${API}/v1/billing/charges?teamId=${teamId}&from=${cycleStart}&to=${hasta}`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
   if (!res.ok) throw new Error(`vercel billing: HTTP ${res.status}`)
