@@ -71,6 +71,7 @@ export async function collectVercelCharge(
 
   let effective = 0
   let billed = 0
+  let proBilled = 0
   const byService: Record<string, { usage: string; charge: number }> = {}
 
   for (const r of rows) {
@@ -79,8 +80,27 @@ export async function collectVercelCharge(
     effective += e
     billed += b
     const name = String(r.ServiceName ?? 'otros')
+    if (name === 'Pro') proBilled += b
     const prev = byService[name]?.charge ?? 0
-    byService[name] = { usage: '', charge: Number((prev + e).toFixed(4)) }
+    byService[name] = { usage: '', charge: Number((prev + b).toFixed(4)) }
+  }
+
+  // Control de que la respuesta llego entera.
+  //
+  // Son decenas de miles de lineas JSONL. Si el stream se corta, el total sale
+  // bajo y parece un mes barato: pidiendo el ciclo 29/08-29/09 se leyeron 7 de
+  // 31 dias y daba US$23.66 cuando la factura fue US$38.82.
+  //
+  // El plan Pro se prorratea parejo —US$0.6452 por dia— asi que su total es un
+  // testigo: si en el tramo pedido no llega al 80% de lo que deberia, faltan
+  // datos y es preferible fallar que informar de menos.
+  const diasPedidos = (Date.parse(hasta) - Date.parse(cycleStart)) / 86400000
+  const diasCiclo = (Date.parse(cycleEnd) - Date.parse(cycleStart)) / 86400000
+  const proEsperado = 20 * (diasPedidos / diasCiclo)
+  if (diasPedidos >= 2 && proBilled < proEsperado * 0.8) {
+    throw new Error(
+      `vercel billing: respuesta incompleta (Pro US$${proBilled.toFixed(2)} de US$${proEsperado.toFixed(2)} esperados en ${diasPedidos.toFixed(0)} dias)`
+    )
   }
 
   // Solo las líneas que mueven la aguja, de mayor a menor.
@@ -96,15 +116,14 @@ export async function collectVercelCharge(
 
   // Mientras no se facture nada, proyectar el bruto menos lo incluido; una vez
   // que empezó a facturar, extrapolar lo facturado, que ya es el dato real.
-  const projected =
-    billed > 0.01 ? billed / pct : Math.max(effectiveProjected - ALLOWANCE_USD, 0)
+  const projected = billed > 0.01 ? billed / pct : Math.max(effectiveProjected - ALLOWANCE_USD, 0)
 
   return {
     amountToDate: Number(billed.toFixed(2)),
     amountProjected: Number(projected.toFixed(2)),
     effectiveToDate: Number(effective.toFixed(2)),
     breakdown: Object.fromEntries(
-      top.map(([k, v]) => [k, { usage: `US$${v.charge.toFixed(2)} de consumo`, charge: v.charge }])
+      top.map(([k, v]) => [k, { usage: `US$${v.charge.toFixed(2)} facturados`, charge: v.charge }])
     ),
   }
 }
