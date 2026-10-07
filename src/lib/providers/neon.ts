@@ -22,6 +22,18 @@ interface NeonProject {
   id: string
   name: string
   active_time?: number // segundos
+  /**
+   * CU-segundos del ciclo. Es lo que factura Neon.
+   *
+   * Solo lo devuelve `GET /projects/{id}`, NO el listado. Y reemplaza a
+   * `cpu_used_sec`, que quedo deprecado: desde el 30/09/2026 devuelve 0 para
+   * todos los proyectos, asi que el dashboard midio cero todo octubre con el
+   * mes real corriendo a ~20 CU-h/dia.
+   */
+  compute_time_seconds?: number
+  active_time_seconds?: number
+  consumption_period_start?: string
+  consumption_period_end?: string
   cpu_used_sec?: number // segundos de CPU ~ CU-segundos
   synthetic_storage_size?: number // bytes
   compute_last_active_at?: string
@@ -57,7 +69,26 @@ export async function collectNeon(
     throw new Error(`Neon API ${res.status}: ${(await res.text()).slice(0, 200)}`)
   }
 
-  const { projects } = (await res.json()) as { projects: NeonProject[] }
+  const { projects: listado } = (await res.json()) as { projects: NeonProject[] }
+
+  // El listado no trae los contadores de consumo — hay que pedir cada proyecto.
+  // Son ~18 llamadas a la API de control, que no despierta ninguna base.
+  const projects = await Promise.all(
+    listado.map(async (lp) => {
+      try {
+        const r = await fetch(`${NEON_API}/projects/${lp.id}`, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          cache: 'no-store',
+        })
+        if (!r.ok) return lp
+        const { project } = (await r.json()) as { project: NeonProject }
+        return project ?? lp
+      } catch {
+        return lp // si falla una, se sigue con lo que trajo el listado
+      }
+    })
+  )
+
   const samples: UsageSample[] = []
   const meta: NeonSnapshot['meta'] = []
   const now = Date.now()
@@ -75,18 +106,21 @@ export async function collectNeon(
         unit,
       })
 
-    // Lo que factura: CU-horas. cpu_used_sec viene en CU-segundos.
-    push('cu_hours', (p.cpu_used_sec ?? 0) / 3600, 'CU-h')
+    // Lo que factura: CU-horas. Se prefiere compute_time_seconds; cpu_used_sec
+    // quedo deprecado y devuelve 0, pero se deja de respaldo por si vuelve.
+    const cuSec = p.compute_time_seconds ?? p.cpu_used_sec ?? 0
+    push('cu_hours', cuSec / 3600, 'CU-h')
     // Cuánto tiempo estuvo despierto — explica el número de arriba.
-    push('active_hours', (p.active_time ?? 0) / 3600, 'h')
+    push('active_hours', (p.active_time_seconds ?? p.active_time ?? 0) / 3600, 'h')
     // Instantánea, no acumulada: no lleva delta.
     push('storage_bytes', p.synthetic_storage_size ?? 0, 'bytes')
 
     // Cierre del ciclo de facturación, tal como lo publica Neon. Sin esto habría
     // que asumir mes calendario, y el ciclo de cada proveedor arranca cuando
     // quiere: el consumo "del mes" no significa nada sin saber cuándo corta.
-    if (p.quota_reset_at) {
-      push('cycle_reset_at_ms', Date.parse(p.quota_reset_at), 'ms')
+    const cierre = p.consumption_period_end ?? p.quota_reset_at
+    if (cierre) {
+      push('cycle_reset_at_ms', Date.parse(cierre), 'ms')
     }
 
     const last = p.compute_last_active_at ? Date.parse(p.compute_last_active_at) : null
@@ -95,7 +129,7 @@ export async function collectNeon(
       name: p.name,
       idleMinutes: last ? (now - last) / 60000 : null,
       maxCu: p.default_endpoint_settings?.autoscaling_limit_max_cu ?? null,
-      quotaResetAt: p.quota_reset_at ?? null,
+      quotaResetAt: p.consumption_period_end ?? p.quota_reset_at ?? null,
     })
   }
 
