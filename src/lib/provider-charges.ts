@@ -29,11 +29,17 @@ import { collectVercelCharge } from '@/lib/providers/vercel-billing'
 // NO asume las 300 CU-h incluidas del plan Launch — asumirlas daba US$67.59
 // contra los US$64.23 que efectivamente marcaba el panel.
 //
-// El plan Launch cobra un mínimo mensual de US$19 que el uso va consumiendo,
-// así que la factura es el mayor entre ese piso y el uso del ciclo.
-const NEON_RATE_CU_HOUR = 0.10593
+// NO hay piso de US$19. Se asumia que el plan Launch cobraba un minimo mensual,
+// pero el panel del 07/10 marcaba US$13.27 —por debajo de ese supuesto piso— con
+// 124.45 CU-h. Contrastado contra los dos paneles, el numero es consumo puro:
+//
+//   septiembre  560.82 CU-h -> US$59.53 calculado   US$59.77 panel
+//   octubre d6  124.45 CU-h -> US$13.27 calculado   US$13.27 panel
+//
+// Si ademas hay una linea de suscripcion en la factura, todavia no se vio una
+// factura de Neon que lo confirme; hasta entonces no se suma nada.
+const NEON_RATE_CU_HOUR = 0.10601
 const NEON_RATE_GB_MONTH = 0.346
-const NEON_PLAN_FLOOR = 19
 
 export interface ChargeRefresh {
   provider: Provider
@@ -226,7 +232,7 @@ export async function refreshCharges(): Promise<ChargeRefresh[]> {
       const compute = u.cuHours * NEON_RATE_CU_HOUR
       const storage = u.gb * NEON_RATE_GB_MONTH
       const usage = compute + storage
-      const amount = Math.max(usage, NEON_PLAN_FLOOR)
+      const amount = usage
 
       // Proyección: lo ya consumido más lo que falta del ciclo al ritmo medido
       // de los últimos 7 días. Si todavía no hay serie suficiente se proyecta el
@@ -236,9 +242,7 @@ export async function refreshCharges(): Promise<ChargeRefresh[]> {
       const rate = await neonDailyRate()
       const daysLeft = Math.max((end - now) / 86400000, 0)
       const projected =
-        rate === null
-          ? Math.max(usage, NEON_PLAN_FLOOR)
-          : Math.max(usage + rate * daysLeft * NEON_RATE_CU_HOUR, NEON_PLAN_FLOOR)
+        rate === null ? usage : usage + rate * daysLeft * NEON_RATE_CU_HOUR
 
       await supabase.from('provider_charges').upsert(
         {
@@ -251,9 +255,6 @@ export async function refreshCharges(): Promise<ChargeRefresh[]> {
           breakdown: {
             compute: { usage: `${u.cuHours.toFixed(2)} CU-h`, charge: Number(compute.toFixed(2)) },
             storage: { usage: `${u.gb.toFixed(2)} GB-mes`, charge: Number(storage.toFixed(2)) },
-            ...(usage < NEON_PLAN_FLOOR
-              ? { piso_del_plan: { usage: 'mínimo Launch', charge: Number((NEON_PLAN_FLOOR - usage).toFixed(2)) } }
-              : {}),
           },
           source: 'derived',
           updated_at: new Date().toISOString(),
