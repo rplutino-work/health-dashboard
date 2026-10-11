@@ -71,7 +71,6 @@ export async function collectVercelCharge(
 
   let effective = 0
   let billed = 0
-  let proBilled = 0
   const byService: Record<string, { usage: string; charge: number }> = {}
 
   for (const r of rows) {
@@ -80,26 +79,28 @@ export async function collectVercelCharge(
     effective += e
     billed += b
     const name = String(r.ServiceName ?? 'otros')
-    if (name === 'Pro') proBilled += b
     const prev = byService[name]?.charge ?? 0
     byService[name] = { usage: '', charge: Number((prev + b).toFixed(4)) }
   }
 
   // Control de que la respuesta llego entera.
   //
-  // Son decenas de miles de lineas JSONL. Si el stream se corta, el total sale
-  // bajo y parece un mes barato: pidiendo el ciclo 29/08-29/09 se leyeron 7 de
-  // 31 dias y daba US$23.66 cuando la factura fue US$38.82.
+  // Son decenas de miles de lineas JSONL y si el stream se corta el total sale
+  // bajo sin avisar: pidiendo el ciclo 29/08-29/09 se leyeron 7 de 31 dias y
+  // daba US$23.66 cuando la factura fue US$38.82.
   //
-  // El plan Pro se prorratea parejo —US$0.6452 por dia— asi que su total es un
-  // testigo: si en el tramo pedido no llega al 80% de lo que deberia, faltan
-  // datos y es preferible fallar que informar de menos.
-  const diasPedidos = (Date.parse(hasta) - Date.parse(cycleStart)) / 86400000
-  const diasCiclo = (Date.parse(cycleEnd) - Date.parse(cycleStart)) / 86400000
-  const proEsperado = 20 * (diasPedidos / diasCiclo)
-  if (diasPedidos >= 2 && proBilled < proEsperado * 0.8) {
+  // Se mide por COBERTURA DE DIAS, no por el renglon del plan. El primer
+  // intento usaba el plan Pro como testigo asumiendo que se prorratea parejo;
+  // no sirve: Vercel lo asigna a distintos dias segun el rango que se pida, y
+  // el control fallaba con respuestas completas —21.420 filas y Pro en cero—
+  // dejando el cargo congelado en el valor viejo.
+  const diasPedidos = Math.round((Date.parse(hasta) - Date.parse(cycleStart)) / 86400000)
+  const diasPresentes = new Set(
+    rows.map((r) => String(r.ChargePeriodStart ?? '').slice(0, 10)).filter(Boolean)
+  ).size
+  if (diasPedidos >= 2 && diasPresentes < diasPedidos * 0.8) {
     throw new Error(
-      `vercel billing: respuesta incompleta (Pro US$${proBilled.toFixed(2)} de US$${proEsperado.toFixed(2)} esperados en ${diasPedidos.toFixed(0)} dias)`
+      `vercel billing: respuesta incompleta (${diasPresentes} dias de ${diasPedidos} pedidos)`
     )
   }
 
