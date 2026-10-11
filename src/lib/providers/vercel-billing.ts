@@ -17,12 +17,17 @@
 const API = 'https://api.vercel.com'
 
 /**
- * Consumo incluido antes de empezar a facturar, medido sobre el ciclo cerrado
- * 29/07–29/08: US$76.47 de consumo derivaron en US$49.20 facturados. El plan
- * declara US$20 incluidos; la diferencia real fue mayor, así que se usa la
- * observada y no la declarada.
+ * Consumo que el plan absorbe antes de facturar.
+ *
+ * Medido sobre los dos ciclos cerrados con datos completos:
+ *   29/07-29/08  consumo US$76.47 - facturado US$56.47 = US$20.00
+ *   29/08-29/09  consumo US$58.82 - facturado US$38.84 = US$19.98
+ *
+ * Son exactamente los US$20 incluidos del plan Pro. Antes esta constante decia
+ * 27.27, sacado de una lectura truncada; con los datos enteros la regla es
+ * simple: facturado = consumo - 20.
  */
-const ALLOWANCE_USD = 27.27
+const ALLOWANCE_USD = 20
 
 export interface VercelCharge {
   amountToDate: number
@@ -115,9 +120,12 @@ export async function collectVercelCharge(
   const pct = Math.min(Math.max((Date.parse(hasta) - start) / (end - start), 0.001), 1)
   const effectiveProjected = effective / pct
 
-  // Mientras no se facture nada, proyectar el bruto menos lo incluido; una vez
-  // que empezó a facturar, extrapolar lo facturado, que ya es el dato real.
-  const projected = billed > 0.01 ? billed / pct : Math.max(effectiveProjected - ALLOWANCE_USD, 0)
+  // Siempre se proyecta desde el consumo, nunca extrapolando lo facturado.
+  //
+  // Lo facturado NO crece en linea recta: el plan absorbe los primeros US$20,
+  // asi que al principio del ciclo queda cerca de cero y recien despues
+  // arranca. Extrapolarlo daba US$5.46 para un ciclo que va camino a US$55.
+  const projected = Math.max(effectiveProjected - ALLOWANCE_USD, 0)
 
   return {
     amountToDate: Number(billed.toFixed(2)),
