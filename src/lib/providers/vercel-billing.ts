@@ -115,10 +115,30 @@ export async function collectVercelCharge(
     .sort((a, b) => b[1].charge - a[1].charge)
     .slice(0, 8)
 
-  const start = Date.parse(cycleStart)
+  // Proyeccion desde el ritmo RECIENTE, no desde el promedio del ciclo.
+  //
+  // Promediar todo el ciclo deja la proyeccion pegada al pasado: el 11/10 se
+  // apago Observability Plus para toda la cuenta —el renglon mas caro— y la
+  // proyeccion seguia dando US$55 porque arrastraba doce dias con el prendido.
+  // Se usan los ultimos 3 dias CERRADOS; el de hoy va incompleto y bajaria el
+  // promedio sin motivo.
+  const porDia = new Map<string, number>()
+  for (const r of rows) {
+    const d = String(r.ChargePeriodStart ?? '').slice(0, 10)
+    if (!d) continue
+    porDia.set(d, (porDia.get(d) ?? 0) + Number(r.EffectiveCost ?? 0))
+  }
+  const hoyStr = new Date().toISOString().slice(0, 10)
+  const cerrados = [...porDia.entries()]
+    .filter(([d]) => d < hoyStr)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+  const ultimos = cerrados.slice(-3)
+  const ritmoDiario =
+    ultimos.length > 0 ? ultimos.reduce((a, b) => a + b[1], 0) / ultimos.length : 0
+
   const end = Date.parse(cycleEnd)
-  const pct = Math.min(Math.max((Date.parse(hasta) - start) / (end - start), 0.001), 1)
-  const effectiveProjected = effective / pct
+  const diasRestantes = Math.max((end - Date.now()) / 86400000, 0)
+  const effectiveProjected = effective + ritmoDiario * diasRestantes
 
   // Siempre se proyecta desde el consumo, nunca extrapolando lo facturado.
   //

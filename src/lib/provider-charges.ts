@@ -151,7 +151,12 @@ async function neonCurrentUsage(
  * restarse.
  */
 async function neonDailyRate(): Promise<number | null> {
-  const from = new Date(Date.now() - 7 * 86400000).toISOString()
+  // Ventana corta a proposito: 3 dias.
+  //
+  // Con 7 dias la proyeccion tardaba una semana en reflejar un cambio. El 10 y
+  // 11/10 se apago argentum-staging y se corrigio el piso de CU de canning
+  // —juntos, la mitad del gasto— y la proyeccion seguia dando el numero viejo.
+  const from = new Date(Date.now() - 3 * 86400000).toISOString()
   const { data } = await supabase
     .from('provider_usage')
     .select('resource_ref, value, captured_at')
@@ -187,7 +192,7 @@ async function neonDailyRate(): Promise<number | null> {
     if (win.length < 2) continue
 
     const days = (win[win.length - 1].t - win[0].t) / 86400000
-    if (days < 0.5) continue // muy poca ventana: su ritmo todavia no dice nada
+    if (days < 0.4) continue // muy poca ventana: su ritmo todavia no dice nada
 
     let grew = 0
     for (let i = 1; i < win.length; i++) {
@@ -286,7 +291,20 @@ export async function refreshCharges(): Promise<ChargeRefresh[]> {
     }
 
     // Vercel tambien se puede derivar: su API de cargos da lo facturado real.
-    if (provider === 'vercel' && process.env.VERCEL_API_TOKEN && process.env.VERCEL_TEAM_ID) {
+    //
+    // Se consulta como mucho cada 3 h: la respuesta son 20.000+ lineas JSONL y
+    // el cron corre cada 30 min. Bajarlas 48 veces por dia es ancho de banda y
+    // tiempo de funcion pagados para un numero que se mueve centavos por hora.
+    const refrescadoHace = r.updated_at
+      ? (now - Date.parse(r.updated_at)) / 3600000
+      : Infinity
+    const tocaVercel = refrescadoHace >= 3 || didRoll
+    if (
+      provider === 'vercel' &&
+      tocaVercel &&
+      process.env.VERCEL_API_TOKEN &&
+      process.env.VERCEL_TEAM_ID
+    ) {
       try {
         const v = await collectVercelCharge(
           process.env.VERCEL_API_TOKEN,
@@ -325,7 +343,16 @@ export async function refreshCharges(): Promise<ChargeRefresh[]> {
     }
 
     if (!didRoll) {
-      out.push({ provider, action: 'sin-cambios', amount: Number(r.amount_to_date), cycle })
+      out.push({
+        provider,
+        action: 'sin-cambios',
+        amount: Number(r.amount_to_date),
+        cycle,
+        note:
+          provider === 'vercel' && !tocaVercel
+            ? `proxima lectura en ${(3 - refrescadoHace).toFixed(1)} h`
+            : undefined,
+      })
       continue
     }
 
