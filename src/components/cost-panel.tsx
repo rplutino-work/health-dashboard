@@ -92,8 +92,11 @@ export function CostPanel({ breakdown, supabase }: CostPanelProps) {
           Los montos marcados <strong className="text-zinc-700">sin badge son reales</strong>,
           tomados del panel de facturación de cada proveedor; los que dicen{' '}
           <strong className="text-sky-700">calculado</strong> se derivan del consumo medido con las
-          tarifas del proveedor; los que dicen <strong className="text-amber-700">sin dato</strong>{' '}
-          abrieron un ciclo nuevo y todavía nadie cargó el monto. El{' '}
+          tarifas del proveedor; los que dicen{' '}
+          <strong className="text-zinc-700">del ciclo anterior</strong> son el monto del mes pasado
+          arrastrado, porque ese proveedor no publica su facturación por API; los que dicen{' '}
+          <strong className="text-amber-700">sin dato</strong> abrieron un ciclo nuevo y todavía
+          nadie cargó el monto. El{' '}
           <strong className="text-zinc-700">reparto entre proyectos es derivado</strong>: se
           prorratea según el consumo medido.
           {capturedAt && (
@@ -148,7 +151,19 @@ export function CostPanel({ breakdown, supabase }: CostPanelProps) {
                         calculado
                       </span>
                     )}
-                    {c.source === 'stale' && (
+                    {c.source === 'carried' && (
+                      <span className="ml-2 text-[9px] font-semibold text-zinc-600 bg-zinc-100 border border-zinc-300 rounded px-1.5 py-0.5 uppercase tracking-wider">
+                        del ciclo anterior
+                      </span>
+                    )}
+                    {c.source === 'carried' && (
+                  <p className="text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-2 mb-3 leading-relaxed">
+                    Es lo que salió el ciclo anterior, no una lectura de este. Este proveedor no
+                    expone su facturación por API: el monto se carga desde la factura.
+                  </p>
+                )}
+
+                {c.source === 'stale' && (
                       <span className="ml-2 text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 uppercase tracking-wider">
                         sin dato
                       </span>
@@ -186,6 +201,13 @@ export function CostPanel({ breakdown, supabase }: CostPanelProps) {
                     </p>
                   </div>
                 </div>
+
+                {c.source === 'carried' && (
+                  <p className="text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-lg px-2.5 py-2 mb-3 leading-relaxed">
+                    Es lo que salió el ciclo anterior, no una lectura de este. Este proveedor no
+                    expone su facturación por API: el monto se carga desde la factura.
+                  </p>
+                )}
 
                 {c.source === 'stale' && (
                   <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mb-3 leading-relaxed">

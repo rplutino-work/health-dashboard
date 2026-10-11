@@ -192,7 +192,18 @@ async function neonDailyRate(): Promise<number | null> {
     let grew = 0
     for (let i = 1; i < win.length; i++) {
       const d = win[i].v - win[i - 1].v
-      if (d > 0) grew += d
+      if (d <= 0) continue
+      // Una base no puede consumir mas CU-horas que horas transcurridas por su
+      // techo de CU, que en este parque nunca pasa de 2. Un salto mayor no es
+      // consumo: es un cambio en la medicion.
+      //
+      // Paso el 07/10, cuando el colector dejo de leer cpu_used_sec —que Neon
+      // habia puesto en cero— y empezo a leer compute_time_seconds: el valor
+      // guardado salto de 0 a 129.8 en dos minutos. Contado como consumo,
+      // inflaba el ritmo de 19 a 30 CU-h/dia y la proyeccion de US$62 a US$87.
+      const horas = (win[i].t - win[i - 1].t) / 3600000
+      const techo = horas * 2
+      grew += Math.min(d, techo)
     }
     rate += grew / days
     measured = true
