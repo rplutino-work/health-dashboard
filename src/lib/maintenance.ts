@@ -17,7 +17,19 @@ import { supabase } from '@/lib/supabase'
  * tendencia, no el minuto a minuto. Medir cada hora guardaba 24 filas diarias
  * por serie para dibujar la misma pendiente que se ve con 2.
  */
-const USAGE_INTERVAL_MS = 12 * 60 * 60 * 1000 // 12 horas
+/**
+ * Cada 3 h, no cada 12.
+ *
+ * Con dos muestras por dia el panel tardaba mas de un dia en reflejar un
+ * cambio: el 10 y 11/10 se apago argentum-staging y se corrigio el piso de CU
+ * de canning, y al pedir el ritmo nuevo habia UNA sola captura posterior — sin
+ * dos puntos no hay pendiente que medir.
+ *
+ * No cuesta nada: son llamadas al plano de control de cada proveedor, que no
+ * despiertan ninguna base. La unica pesada era la de cargos de Vercel y esa
+ * tiene su propio limite de 3 h en provider-charges.
+ */
+const USAGE_INTERVAL_MS = 3 * 60 * 60 * 1000 // 12 horas
 
 /** Días de checks crudos a conservar. Lo anterior queda solo como resumen diario. */
 const KEEP_DAYS = 30
