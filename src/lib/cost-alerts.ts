@@ -15,8 +15,18 @@ import { renderEmail, subjectFor, renderBarChart, type EmailRow } from '@/lib/em
 
 const DASHBOARD_URL = 'https://health-dashboard-kohl-delta.vercel.app'
 
-/** Se avisa cuando la proyección del ciclo supera esto. */
+/**
+ * Se avisa cuando la proyección de INFRAESTRUCTURA supera esto.
+ *
+ * Deliberadamente deja afuera la suscripción de Claude. Antes el umbral se
+ * comparaba contra el total, y como Claude solo ya son US$100, el aviso saltaba
+ * todos los días pasara lo que pasara con la infra — que es justo lo único
+ * sobre lo que se puede hacer algo.
+ */
 const COST_ALERT_USD = Number(process.env.COST_ALERT_THRESHOLD_USD ?? 100)
+
+/** No es infraestructura: es herramienta de trabajo y su monto es fijo. */
+const FUERA_DE_INFRA = new Set(['anthropic'])
 /** Porcentaje de un límite del plan free a partir del cual conviene enterarse. */
 const LIMIT_ALERT_PCT = 80
 /** Un aviso del mismo tipo no se repite dentro de esta ventana. */
@@ -74,22 +84,30 @@ export async function processCostAlerts(): Promise<CostAlertReport> {
   const rate = fx.oficial ?? fx.tarjeta
 
   // ── Proyección por encima del umbral ──────────────────────────────────────
-  if (breakdown.totalProjected >= COST_ALERT_USD) {
+  const infra = breakdown.charges.filter((c) => !FUERA_DE_INFRA.has(c.provider))
+  const infraHoy = infra.reduce((a, c) => a + c.amountToDate, 0)
+  const infraProyectada = infra.reduce((a, c) => a + (c.amountProjected ?? c.ownProjection), 0)
+  const claude = breakdown.charges.find((c) => c.provider === 'anthropic')
+
+  if (infraProyectada >= COST_ALERT_USD) {
     if (await alreadySent('cost_projection')) {
       skipped.push('cost_projection')
     } else {
       const top = breakdown.projects.filter((p) => (p.total ?? 0) > 0).slice(0, 5)
       const rows: EmailRow[] = [
         {
-          label: 'Gasto a hoy',
-          value: money(breakdown.totalToDate, rate),
+          label: 'Infraestructura a hoy',
+          value: money(infraHoy, rate),
         },
         {
-          label: 'Proyectado al cierre',
-          value: money(breakdown.totalProjected, rate),
+          label: 'Infraestructura al cierre',
+          value: money(infraProyectada, rate),
           emphasis: true,
         },
-        ...breakdown.charges
+        ...(claude
+          ? [{ label: 'Claude (fijo, aparte)', value: money(claude.amountToDate, rate) }]
+          : []),
+        ...infra
           .filter((c) => c.amountToDate > 0)
           .map((c) => ({
             label: `${c.provider} · cierra ${c.cycleEnd.slice(8, 10)}/${c.cycleEnd.slice(5, 7)}`,
@@ -109,12 +127,12 @@ export async function processCostAlerts(): Promise<CostAlertReport> {
         to: alertConfig.emailTo,
         subject: subjectFor(
           'warning',
-          `Infraestructura proyecta US$${breakdown.totalProjected.toFixed(0)} este ciclo`
+          `Infraestructura proyecta US$${infraProyectada.toFixed(0)} este ciclo`
         ),
         html: renderEmail({
           severity: 'warning',
-          title: `Proyección: ${money(breakdown.totalProjected, rate)}`,
-          subtitle: `Supera el umbral de US$${COST_ALERT_USD}. Los ciclos de cada proveedor cierran en fechas distintas.`,
+          title: `Infraestructura: ${money(infraProyectada, rate)}`,
+          subtitle: `Supera el umbral de US$${COST_ALERT_USD}. No incluye Claude, que es fijo. Los ciclos de cada proveedor cierran en fechas distintas.`,
           body: top.length
             ? `<p style="margin:0 0 8px;">Los que más pesan:</p><ul style="margin:0;padding-left:18px;">${list}</ul>`
             : undefined,

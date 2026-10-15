@@ -132,9 +132,20 @@ export async function collectVercelCharge(
   const cerrados = [...porDia.entries()]
     .filter(([d]) => d < hoyStr)
     .sort((a, b) => a[0].localeCompare(b[0]))
-  const ultimos = cerrados.slice(-3)
+  // MEDIANA de los ultimos 7 dias cerrados, no promedio de 3.
+  //
+  // El consumo diario varia 5 veces segun que tan movido viene Race Room: en
+  // este ciclo fue de US$0.96 a US$5.35. Con el promedio de 3 dias, un solo dia
+  // ocupado movia la proyeccion un 80% —el 13/10 simuladorvr hizo US$3.78 de
+  // CPU e invocaciones y la proyeccion salto a US$61—. La mediana ignora el
+  // dia raro y sigue la tendencia.
+  const ultimos = cerrados.slice(-7).map(([, v]) => v).sort((a, b) => a - b)
   const ritmoDiario =
-    ultimos.length > 0 ? ultimos.reduce((a, b) => a + b[1], 0) / ultimos.length : 0
+    ultimos.length === 0
+      ? 0
+      : ultimos.length % 2
+        ? ultimos[(ultimos.length - 1) / 2]
+        : (ultimos[ultimos.length / 2 - 1] + ultimos[ultimos.length / 2]) / 2
 
   const end = Date.parse(cycleEnd)
   const diasRestantes = Math.max((end - Date.now()) / 86400000, 0)
