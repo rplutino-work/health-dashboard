@@ -5,7 +5,7 @@ import { processAlerts } from '@/lib/alerts'
 import { projects } from '@/config/projects'
 import { collectAllUsage } from '@/lib/usage'
 import { shouldCollectUsage, runDailyMaintenance } from '@/lib/maintenance'
-import { processCostAlerts, sendDailyDigest } from '@/lib/cost-alerts'
+import { processCostAlerts, sendDailyDigest, avisarDominios } from '@/lib/cost-alerts'
 import { snapshotBilling } from '@/lib/billing-history'
 import { refreshCharges } from '@/lib/provider-charges'
 
@@ -152,6 +152,14 @@ async function handler(request: NextRequest) {
     console.error('Cost alerts error:', err)
   }
 
+  // Dominios: vencidos o a menos de 45 dias. Tiene su propio cooldown de 24 h.
+  let dominios = false
+  try {
+    dominios = await avisarDominios()
+  } catch (err) {
+    console.error('Domain expiry error:', err)
+  }
+
   // Resumen diario, a partir de las 9 de la manana hora argentina: un momento
   // fijo para enterarse de como viene todo sin depender de que algo se rompa.
   let digest = false
@@ -180,6 +188,7 @@ async function handler(request: NextRequest) {
     maintenance,
     costAlerts,
     digest,
+    dominios,
     billing,
     charges,
   })

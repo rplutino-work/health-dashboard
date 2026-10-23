@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { alertConfig, projects } from '@/config/projects'
 import { getCostBreakdown, getFx } from '@/lib/costs'
 import { renderEmail, subjectFor, renderBarChart, type EmailRow } from '@/lib/email-templates'
+import { revisarDominios, urgentes } from '@/lib/domain-expiry'
 
 /**
  * Avisos de plata y de límites.
@@ -405,4 +406,59 @@ function renderFailingList(f: { down: FailingCheck[]; degraded: FailingCheck[] }
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+/**
+ * Avisa por dominios vencidos o por vencer.
+ *
+ * Va aparte del resumen diario porque un dominio vencido no es informacion:
+ * es un sitio caido que nadie puede arreglar desde el codigo. meleroller.com.ar
+ * estuvo un mes abajo sin que el monitoreo dijera nada — chequeaba que el sitio
+ * respondiera, y un dominio sin delegar ni siquiera resuelve.
+ */
+export async function avisarDominios(): Promise<boolean> {
+  const estados = await revisarDominios()
+  const urge = urgentes(estados)
+  if (urge.length === 0) return false
+  if (await alreadySent('domain_expiry', 24)) return false
+
+  const vencidos = urge.filter((e) => e.vencido)
+  const severity = vencidos.length > 0 ? 'critical' : 'warning'
+
+  const fila = (e: (typeof urge)[number]) => {
+    const color = e.vencido ? '#dc2626' : e.diasRestantes <= 15 ? '#b45309' : '#71717a'
+    const cuando = e.vencido
+      ? `vencido hace ${-e.diasRestantes} días`
+      : `en ${e.diasRestantes} días`
+    return `
+      <tr>
+        <td style="padding:6px 8px 6px 0;font-size:12px;font-weight:600;color:#18181b;white-space:nowrap;">${e.dominio}</td>
+        <td style="padding:6px 0;font-size:11px;color:#71717a;">${e.titular}</td>
+        <td style="padding:6px 0 6px 8px;font-size:11px;font-weight:600;color:${color};text-align:right;white-space:nowrap;">${e.vence} · ${cuando}</td>
+      </tr>`
+  }
+
+  await resend().emails.send({
+    from: 'Health Dashboard <onboarding@resend.dev>',
+    to: alertConfig.emailTo,
+    subject: subjectFor(
+      severity,
+      vencidos.length
+        ? `${vencidos[0].dominio} está vencido`
+        : `${urge[0].dominio} vence en ${urge[0].diasRestantes} días`
+    ),
+    html: renderEmail({
+      severity,
+      title: vencidos.length
+        ? `${vencidos.length} dominio${vencidos.length > 1 ? 's' : ''} vencido${vencidos.length > 1 ? 's' : ''}`
+        : 'Dominios por vencer',
+      subtitle:
+        'Un dominio vencido no se arregla desde el código: hay que renovarlo con el titular. Los .com.ar tardan días.',
+      body: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${urge.map(fila).join('')}</table>`,
+      cta: { label: 'Ver el dashboard', url: DASHBOARD_URL },
+    }),
+  })
+
+  await logSystemAlert('domain_expiry')
+  return true
 }
