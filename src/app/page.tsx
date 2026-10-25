@@ -6,6 +6,9 @@ import { CostPanel } from '@/components/cost-panel'
 import { getCostBreakdown, getFx } from '@/lib/costs'
 import { CostBars, FxCard } from '@/components/cost-bars'
 import { HistoryPanel } from '@/components/history-panel'
+import { MonthlyChart } from '@/components/monthly-chart'
+import { UptimePanel } from '@/components/uptime-panel'
+import { getMonthlyCosts, getSaludMensual } from '@/lib/monthly-costs'
 import { getClosedCycles, getCycleProgress } from '@/lib/billing-history'
 import { getInvoices } from '@/lib/costs'
 
@@ -83,7 +86,7 @@ async function getSupabaseLimits() {
 }
 
 export default async function DashboardPage() {
-  const [{ checks, lastRun, failed }, breakdown, supabaseLimits, fx, closedCycles, cycleProgress, invoices] =
+  const [{ checks, lastRun, failed }, breakdown, supabaseLimits, fx, closedCycles, cycleProgress, invoices, mensual, salud] =
     await Promise.all([
       getData(),
       getCostBreakdown(),
@@ -92,6 +95,8 @@ export default async function DashboardPage() {
       getClosedCycles(),
       getCycleProgress('neon'),
       getInvoices(),
+      getMonthlyCosts(),
+      getSaludMensual(),
     ])
 
   // Deduplicate: keep latest per project_slug+check_name
@@ -179,6 +184,15 @@ export default async function DashboardPage() {
           projectedUsd={breakdown.totalProjected}
         />
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
+
+        <MonthlyChart meses={mensual} />
+
+        <UptimePanel salud={salud} />
+
+      </div>
+
 
       <HistoryPanel closed={closedCycles} progress={cycleProgress} invoices={invoices} />
 
