@@ -11,6 +11,15 @@
  *
  * Solo a service_role. Ni anon ni authenticated: estas tablas son metricas de
  * costos y nadie las consulta desde el navegador.
+ *
+ * El GRANT no alcanza: la tabla nueva tambien necesita RLS, o queda legible y
+ * escribible por cualquiera que tenga la anon key. Son dos lineas, no una:
+ *
+ *   ALTER TABLE public.<tabla> ENABLE ROW LEVEL SECURITY;
+ *
+ * Sin politicas. Esto no afecta al dashboard porque service_role tiene
+ * `bypassrls`. Lo mismo con las funciones nuevas: Postgres les da EXECUTE a
+ * PUBLIC por defecto, asi que hay que revocarlo. Ver `sql/001_rls_lockdown.sql`.
  */
 import { createClient } from '@supabase/supabase-js'
 
