@@ -1,0 +1,35 @@
+name: Neon Backups
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # Todos los días a las 05:00 UTC (02:00 ART)
+  workflow_dispatch: # Para disparar a mano
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sin versión fija. pg_dump se niega a volcar un servidor más nuevo que
+      # él, y el paquete de la distro es siempre el más nuevo disponible: hoy
+      # los proyectos son PG17 y PG18, y el cliente 18 cubre los dos. Clavar un
+      # número es lo que rompió el backup de ecommerce-kit cuando
+      # ubuntu-latest pasó a 26.04 y postgresql-client-16 dejó de existir.
+      - name: Instalar cliente de PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          pg_dump --version
+
+      - name: Respaldar todas las bases
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: db-backups
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: ./scripts/backup-neon.sh
