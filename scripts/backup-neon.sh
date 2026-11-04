@@ -15,12 +15,22 @@ set -uo pipefail
 API="https://console.neon.tech/api/v2"
 HOY=$(date -u +%Y-%m-%d)
 
-# Bases que se saltean a mano, por slug y separadas por espacios. `playabe`
-# son 104 MB por noche —tres cuartos de todo el volumen— y queda afuera hasta
-# decidir qué hacer con ella; borrarla de esta línea la vuelve a respaldar.
-# Aparecen en el resumen de cada corrida igual, para que una exclusión quede a
-# la vista y no se transforme en un agujero que nadie recuerda.
-EXCLUIDAS="playabe"
+# Bases que se saltean a mano, por slug y separadas por espacios. Aparecen en
+# el resumen de cada corrida igual, para que una exclusión quede a la vista y
+# no se transforme en un agujero que nadie recuerda.
+EXCLUIDAS=""
+
+# Bases que guardan 7 días en vez de 30, para acotar volumen sin resignar el
+# backup. `playabe` son 104 MB por noche —tres cuartos de todo— porque tiene
+# un catálogo de 213.706 canciones importado de un scrapeo; lo que NO se puede
+# recuperar (usuarios, reseñas, comunidad, anotaciones) pesa menos de 1 MB,
+# pero no se puede volcar aparte: cinco tablas apuntan a `songs` por clave
+# foránea y un dump sin esos datos no se restaura.
+#
+# La clase va en el prefijo y no en una regla aparte porque las reglas de
+# ciclo de vida se aplican por prefijo, y dos reglas sobre prefijos que se
+# solapan no tienen precedencia definida.
+RETENCION_CORTA="playabe"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
@@ -142,7 +152,12 @@ while IFS=$'\t' read -r pid nombre; do
 
     bytes=$(stat -c%s "$archivo")
 
-    if ! aws s3 cp "$archivo" "s3://$R2_BUCKET/neon/$s/$base/$HOY.sql.gz" \
+    clase=30d
+    case " $RETENCION_CORTA " in
+      *" $s "*) clase=7d ;;
+    esac
+
+    if ! aws s3 cp "$archivo" "s3://$R2_BUCKET/neon/$clase/$s/$base/$HOY.sql.gz" \
       --endpoint-url "$R2_ENDPOINT" --only-show-errors < /dev/null; then
       printf '%s\t%s\tfalló la subida a R2\n' "$s" "$base" >> "$resumen"
       fallas=$((fallas + 1))
