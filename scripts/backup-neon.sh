@@ -35,6 +35,7 @@ slug() { echo "$1" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-'; }
 
 ok=0
 fallas=0
+omitidas=0
 resumen="$TMP/resumen.tsv"
 : > "$resumen"
 
@@ -47,6 +48,19 @@ echo "Proyectos a respaldar: $(echo "$proyectos" | wc -l | tr -d ' ')"
 
 while IFS=$'\t' read -r pid nombre; do
   s=$(slug "$nombre")
+
+  # Un compute apagado a mano no se puede volcar: pg_dump no se conecta y ya.
+  # Se mira el estado en vez de llevar una lista de nombres, así que si se
+  # vuelve a prender queda respaldado sin tocar nada. Sale como warning y no
+  # como falla —argentum-staging está apagada a propósito desde el 28/10—
+  # pero queda a la vista, para que apagar una base de producción por error no
+  # se transforme en un backup que desaparece en silencio.
+  if [ "$(neon "projects/$pid/endpoints" | jq -r '[.endpoints[] | select(.type == "read_write")][0].disabled')" = "true" ]; then
+    echo "::warning::$s omitida: su compute está deshabilitado en Neon"
+    printf '%s\t-\tomitida · compute deshabilitado\n' "$s" >> "$resumen"
+    omitidas=$((omitidas + 1))
+    continue
+  fi
 
   rama=$(neon "projects/$pid/branches" | jq -r '[.branches[] | select(.default)][0].id')
   if [ -z "$rama" ] || [ "$rama" = "null" ]; then
@@ -114,12 +128,12 @@ done <<< "$proyectos"
   echo "|---|---|---|"
   sed 's/\t/ | /g; s/^/| /; s/$/ |/' "$resumen"
   echo
-  echo "**$ok bases respaldadas · $fallas con problemas**"
+  echo "**$ok bases respaldadas · $omitidas omitidas · $fallas con problemas**"
 } >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
 column -t -s $'\t' "$resumen"
 echo
-echo "respaldadas: $ok · con problemas: $fallas"
+echo "respaldadas: $ok · omitidas: $omitidas · con problemas: $fallas"
 
 if [ "$fallas" -gt 0 ]; then
   echo "::error::$fallas bases quedaron sin respaldo"
