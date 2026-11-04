@@ -96,17 +96,35 @@ while IFS=$'\t' read -r pid nombre; do
       continue
     fi
 
-    # pg_dump escribe este pie SÓLO si llegó al final. Es la única prueba de
-    # que el volcado está completo; el tamaño no distingue un dump entero de
-    # uno cortado a la mitad.
-    if ! gzip -dc "$archivo" | tail -5 | grep -q 'PostgreSQL database dump complete'; then
+    # pg_dump escribe "dump complete" SÓLO si llegó al final: es la única
+    # prueba de que el volcado está entero y no cortado a la mitad, porque el
+    # tamaño no distingue esos dos casos.
+    #
+    # Se busca en todo el archivo y no en las últimas líneas: el pie no es la
+    # última: PG18 escribe un bloque `\unrestrict` después. Un `tail -5` anda
+    # hoy y se auto-inventa una falla el día que se agregue un renglón.
+    #
+    # Un solo pase de descompresión para las dos cuentas: el dump más grande
+    # es de 104 MB y no vale la pena abrirlo dos veces.
+    if ! medidas=$(gzip -dc "$archivo" | awk '
+      /^CREATE TABLE / { t++ }
+      /PostgreSQL database dump complete/ { pie = 1 }
+      END { print t + 0, pie + 0 }
+    '); then
+      printf '%s\t%s\tel .gz no se puede leer\n' "$s" "$base" >> "$resumen"
+      fallas=$((fallas + 1))
+      continue
+    fi
+    tablas=${medidas%% *}
+    pie=${medidas##* }
+
+    if [ "$pie" != "1" ]; then
       printf '%s\t%s\tdump incompleto (sin el pie de pg_dump)\n' "$s" "$base" >> "$resumen"
       fallas=$((fallas + 1))
       continue
     fi
 
     bytes=$(stat -c%s "$archivo")
-    tablas=$(gzip -dc "$archivo" | grep -c '^CREATE TABLE ' || true)
 
     if ! aws s3 cp "$archivo" "s3://$R2_BUCKET/neon/$s/$base/$HOY.sql.gz" \
       --endpoint-url "$R2_ENDPOINT" --only-show-errors < /dev/null; then
