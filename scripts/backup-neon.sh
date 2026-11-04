@@ -14,6 +14,13 @@ set -uo pipefail
 
 API="https://console.neon.tech/api/v2"
 HOY=$(date -u +%Y-%m-%d)
+
+# Bases que se saltean a mano, por slug y separadas por espacios. `playabe`
+# son 104 MB por noche —tres cuartos de todo el volumen— y queda afuera hasta
+# decidir qué hacer con ella; borrarla de esta línea la vuelve a respaldar.
+# Aparecen en el resumen de cada corrida igual, para que una exclusión quede a
+# la vista y no se transforme en un agujero que nadie recuerda.
+EXCLUIDAS="playabe"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
@@ -36,6 +43,7 @@ slug() { echo "$1" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-'; }
 ok=0
 fallas=0
 omitidas=0
+excluidas=0
 resumen="$TMP/resumen.tsv"
 : > "$resumen"
 
@@ -48,6 +56,14 @@ echo "Proyectos a respaldar: $(echo "$proyectos" | wc -l | tr -d ' ')"
 
 while IFS=$'\t' read -r pid nombre; do
   s=$(slug "$nombre")
+
+  case " $EXCLUIDAS " in
+    *" $s "*)
+      printf '%s\t-\texcluida a mano\n' "$s" >> "$resumen"
+      excluidas=$((excluidas + 1))
+      continue
+      ;;
+  esac
 
   # Un compute apagado a mano no se puede volcar: pg_dump no se conecta y ya.
   # Se mira el estado en vez de llevar una lista de nombres, así que si se
@@ -146,12 +162,12 @@ done <<< "$proyectos"
   echo "|---|---|---|"
   sed 's/\t/ | /g; s/^/| /; s/$/ |/' "$resumen"
   echo
-  echo "**$ok bases respaldadas · $omitidas omitidas · $fallas con problemas**"
+  echo "**$ok respaldadas · $excluidas excluidas · $omitidas omitidas · $fallas con problemas**"
 } >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
 column -t -s $'\t' "$resumen"
 echo
-echo "respaldadas: $ok · omitidas: $omitidas · con problemas: $fallas"
+echo "respaldadas: $ok · excluidas: $excluidas · omitidas: $omitidas · con problemas: $fallas"
 
 if [ "$fallas" -gt 0 ]; then
   echo "::error::$fallas bases quedaron sin respaldo"
