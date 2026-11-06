@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 import { runAllChecks } from '@/lib/checker'
 import { processAlerts } from '@/lib/alerts'
@@ -176,6 +177,17 @@ async function handler(request: NextRequest) {
     if (forced || hourArg >= 9) digest = await sendDailyDigest(forced)
   } catch (err) {
     console.error('Digest error:', err)
+  }
+
+  // Recien aca, con todas las escrituras hechas, se marcan las paginas: asi la
+  // proxima visita ve tambien el consumo y los cargos, no solo los chequeos.
+  // Desde un Route Handler esto NO regenera nada todavia, solo invalida, asi
+  // que marcar las 21 fichas de proyecto no cuesta 21 renders.
+  try {
+    revalidatePath('/')
+    revalidatePath('/project/[slug]', 'page')
+  } catch (err) {
+    console.error('Revalidate error:', err)
   }
 
   return NextResponse.json({

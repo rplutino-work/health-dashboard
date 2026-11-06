@@ -9,7 +9,9 @@ import { CheckRow } from '@/components/check-row'
 import { HistoryChart } from '@/components/history-chart'
 import { ManualRecheckButton } from '@/components/manual-recheck-button'
 
-export const revalidate = 60
+// Igual que la home: la frescura la da el `revalidatePath` del cron y del
+// recheck, no el reloj. Ver el comentario largo en `src/app/page.tsx`.
+export const revalidate = 1800
 
 interface HealthCheck {
   check_name: string

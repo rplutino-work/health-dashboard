@@ -12,7 +12,22 @@ import { getMonthlyCosts, getSaludMensual } from '@/lib/monthly-costs'
 import { getClosedCycles, getCycleProgress } from '@/lib/billing-history'
 import { getInvoices } from '@/lib/costs'
 
-export const revalidate = 60
+/**
+ * Media hora, no un minuto.
+ *
+ * Esta pagina baja ~0,58 MB de Supabase por regeneracion (300 chequeos, 4.000
+ * filas de `provider_usage` dos veces, el historial de facturacion). Los datos
+ * los escribe el cron cada 30 min, asi que a `revalidate = 60` de cada 30
+ * regeneraciones 29 bajaban exactamente los mismos bytes: 0,81 GB por dia en el
+ * techo, y los 5,5 GB de egress que agotaron el plan gratis en noviembre 2026.
+ *
+ * La frescura no la da este numero sino `revalidatePath('/')` al final del
+ * cron y del recheck: desde un Route Handler eso solo MARCA el path, asi que la
+ * pagina se regenera cuando alguien la mira despues de que entraron datos
+ * nuevos. El egress pasa a ser proporcional a quien mira, no al reloj. Este
+ * valor queda de red de contencion por si una escritura no invalida.
+ */
+export const revalidate = 1800
 
 interface HealthCheck {
   project_slug: string
