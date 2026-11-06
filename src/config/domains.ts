@@ -6,10 +6,19 @@
  * quitado la delegacion. El monitoreo chequeaba que el sitio respondiera, pero
  * nadie miraba las fechas.
  *
- * Los `.com` se refrescan solos por RDAP. Los `.com.ar` NO: NIC Argentina no
- * tiene RDAP y su WHOIS es puerto 43, que una funcion serverless no puede usar.
- * Para esos la fecha vive aca y se actualiza a mano cuando se renueva — que es
- * una vez por año y la alerta avisa antes.
+ * Los `.com` se refrescan solos por RDAP. Los `.com.ar` NO: IANA anuncia
+ * `https://rdap.nic.ar/` para `.ar`, pero el host resuelve y no acepta
+ * conexiones (probado el 29/10/2026: timeout). Solo queda WHOIS en el puerto 43.
+ * Para esos la fecha vive aca y se actualiza a mano cuando se renueva.
+ *
+ * El riesgo de eso es la ALERTA FALSA, no el olvido: si el dominio se renueva y
+ * nadie toca este archivo, el dashboard grita "vencido" para siempre. Paso con
+ * meleroller.com.ar, renovado el 23/10/2026 y todavia en rojo el 29/10. Para
+ * auditar las fechas contra el registro, desde la Mac (no desde serverless):
+ *
+ *   whois -h whois.nic.ar <dominio>.com.ar | grep expire
+ *   curl -sH 'Accept: application/rdap+json' \
+ *     https://rdap.verisign.com/com/v1/domain/<dominio>.com | jq '.events'
  */
 
 export interface DominioVigilado {
@@ -24,18 +33,16 @@ export interface DominioVigilado {
 }
 
 export const DOMINIOS: DominioVigilado[] = [
-  // ── Vencido: NIC le quito la delegacion, el sitio no resuelve ────────────
+  // ── Por fecha de vencimiento ─────────────────────────────────────────────
   {
-    dominio: 'meleroller.com.ar',
-    proyecto: 'meller',
-    vence: '2026-09-22',
-    registrador: 'NIC Argentina',
-    titular: 'Oscar Alberto MELE (CUIT 20323824801)',
-  },
-  // ── El resto, por fecha ──────────────────────────────────────────────────
-  {
+    // OJO: NO es el club. Es la TIENDA Shopify (`bnwyf7-dj.myshopify.com`), que
+    // no esta en `projects.ts` porque no se monitorea como app. Apunta a
+    // 23.227.38.32 y www a shops.myshopify.com. El club es pilatesbasicsclub.com,
+    // mas abajo. Estuvo mal etiquetado como 'compactfit-membresias' hasta el
+    // 29/10/2026 — la alerta apuntaba al sistema equivocado.
+    // Registro Y DNS estan los dos en GoDaddy: si vence, se cae la zona entera.
     dominio: 'compactfit-pilatesbasics.com',
-    proyecto: 'compactfit-membresias',
+    proyecto: 'compactfit-pilatesbasics (tienda Shopify)',
     vence: '2026-11-06',
     registrador: 'GoDaddy',
     titular: 'CompactFit',
@@ -55,6 +62,7 @@ export const DOMINIOS: DominioVigilado[] = [
     titular: 'PLUTINO RODRIGO IVAN',
   },
   {
+    // Este si es el club (PB Club). Registro y DNS en Cloudflare, sirve Vercel.
     dominio: 'pilatesbasicsclub.com',
     proyecto: 'compactfit-membresias',
     vence: '2027-04-22',
@@ -81,6 +89,16 @@ export const DOMINIOS: DominioVigilado[] = [
     vence: '2027-09-06',
     registrador: 'NIC Argentina',
     titular: 'FAGALDE Karina Andrea (CUIT 27227170668)',
+  },
+  {
+    // Renovado el 23/10/2026. Estuvo vencido un mes y NIC le quito la
+    // delegacion; ahora resuelve de nuevo a Vercel. La fecha la confirmo WHOIS
+    // el 29/10/2026 — ver la cabecera de este archivo sobre por que se revisa a mano.
+    dominio: 'meleroller.com.ar',
+    proyecto: 'meller',
+    vence: '2027-09-22',
+    registrador: 'NIC Argentina',
+    titular: 'Oscar Alberto MELE (CUIT 20323824801)',
   },
   {
     dominio: 'argentumsubastas.com',
